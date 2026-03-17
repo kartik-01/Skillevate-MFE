@@ -1,0 +1,75 @@
+# ------------------------------
+# Dependencies
+# ------------------------------
+node_modules/
+.pnp
+.pnp.js
+
+# ------------------------------
+# Build outputs
+# ------------------------------
+dist/
+build/
+out/
+coverage/
+*.tsbuildinfo
+
+# Keep all app/package dist outputs out of git
+apps/*/dist/
+packages/*/dist/
+
+# ------------------------------
+# Logs
+# ------------------------------
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ------------------------------
+# Environment files (secrets)
+# ------------------------------
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# ------------------------------
+# Caches / tooling
+# ------------------------------
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+.nx/
+.turbo/
+.vite/
+
+# ------------------------------
+# Testing / reports
+# ------------------------------
+.nyc_output/
+junit.xml
+playwright-report/
+
+# ------------------------------
+# Editor / IDE
+# ------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ------------------------------
+# OS files
+# ------------------------------
+.DS_Store
+Thumbs.db
+
+# ------------------------------
+# Optional local publish artifacts
+# ------------------------------
+*.tgz
