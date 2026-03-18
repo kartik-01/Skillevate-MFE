@@ -2,6 +2,7 @@ import React, { useEffect, useState, Suspense } from "react";
 import { useAuth0 } from "@auth0/auth0-react";
 import { loadRemoteSafely } from "./utils/loadRemoteSafely";
 import { motion, AnimatePresence } from "framer-motion";
+import { Target, TrendingUp, PlaySquare, Award } from "lucide-react";
 import LandingHome from "./landing/LandingHome";
 import Footer from "./landing/components/Footer";
 import Header from "./landing/components/Header";
@@ -19,6 +20,9 @@ if (module && (module as any).hot) {
 
 type RemoteModule = React.ComponentType | null;
 
+const avatarImg =
+  "https://images.unsplash.com/photo-1701463387028-3947648f1337?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBwb3J0cmFpdCUyMHVzZXIlMjBwcm9maWxlfGVufDF8fHx8MTc3Mzc5NDA2Nnww&ixlib=rb-4.1.0&q=80&w=1080";
+
 export default function App() {
   const {
     isAuthenticated,
@@ -30,9 +34,9 @@ export default function App() {
 
   type ActiveApp = "recommendation" | "gamify" | "analysis";
   const tabs: Array<{ id: ActiveApp; label: string }> = [
-    { id: "analysis", label: "Skill Gap Analysis" },
-    { id: "recommendation", label: "Learning Recommendations" },
-    { id: "gamify", label: "Gamified Progress" },
+    { id: "analysis", label: "Skill Analysis" },
+    { id: "recommendation", label: "Learning Path" },
+    { id: "gamify", label: "My Progress" },
   ];
 
   // Helper: map hash → app
@@ -187,39 +191,83 @@ export default function App() {
         />
 
         <main className="flex-grow w-full max-w-7xl mx-auto px-4 sm:px-6 pt-28 pb-10">
-          <div className="space-y-10">
-            <section className="glass-card rounded-2xl p-8 sm:p-10">
-              <div className="max-w-3xl mx-auto text-center">
-                <h2 className="mt-2 text-3xl sm:text-4xl tracking-tight">
-                  <span className="text-gradient">Your Career Command Center</span>
-                </h2>
-                <p className="mt-3 text-muted-foreground">
-                  Turn skill insights into action with gap analysis, personalized learning
-                  recommendations, and gamified progress.
-                </p>
-              </div>
-            </section>
+          <div className="bg-[#F0F9F7] dark:bg-[#0f1f1c] font-sans text-slate-800 dark:text-slate-100 p-4 md:p-8 rounded-3xl">
+            <div className="w-full space-y-8">
+              <section className="bg-white dark:bg-[#132825] rounded-3xl p-6 md:p-8 shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                <div className="flex items-center gap-5">
+                  <div className="relative">
+                    <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-[#1DB896] p-[2px]">
+                      <img
+                        src={avatarImg}
+                        alt="User Profile"
+                        className="w-full h-full rounded-full object-cover"
+                      />
+                    </div>
+                    <div className="absolute -bottom-2 -right-2 bg-[#1DB896] text-white text-xs font-bold px-2 py-1 rounded-full border-2 border-white dark:border-[#132825] flex items-center shadow-sm">
+                      Lvl 4
+                    </div>
+                  </div>
+                  <div>
+                    <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                      Welcome back, {firstName}
+                    </h1>
+                    <p className="text-slate-500 dark:text-slate-300 font-medium flex items-center gap-2 mt-1">
+                      <Target size={16} className="text-[#1DB896]" />
+                      Target Role: Senior Frontend Engineer
+                    </p>
+                  </div>
+                </div>
+                <div className="w-full md:w-64 bg-[#F0F9F7] dark:bg-[#0f1f1c] rounded-2xl p-4">
+                  <div className="flex justify-between text-sm font-semibold mb-2">
+                    <span className="text-slate-700 dark:text-slate-200">Level 4</span>
+                    <span className="text-[#1DB896]">1,200 / 2,000 XP</span>
+                  </div>
+                  <div className="h-2 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: "60%" }}
+                      transition={{ duration: 1, ease: "easeOut" }}
+                      className="h-full bg-[#1DB896] rounded-full"
+                    />
+                  </div>
+                </div>
+              </section>
 
-            <section className="glass-card rounded-2xl p-4 sm:p-6">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="flex flex-wrap gap-3 text-sm font-medium">
-                    {tabs.map((tab) => (
+              <div className="flex p-1 bg-white dark:bg-[#132825] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 w-fit">
+                {tabs.map((tab) => {
+                  const iconMap: Record<ActiveApp, React.ComponentType<{ size?: number; className?: string }>> = {
+                    analysis: TrendingUp,
+                    recommendation: PlaySquare,
+                    gamify: Award,
+                  };
+                  const Icon = iconMap[tab.id];
+                  const isActive = activeApp === tab.id;
+
+                  return (
                     <button
                       key={tab.id}
-                        onClick={() => setActiveApp(tab.id)}
-                      className={`relative px-4 py-2 rounded-full border transition ${
-                        activeApp === tab.id
-                          ? "border-cyan-600 text-cyan-700 bg-cyan-50 dark:bg-cyan-500/10"
-                          : "border-border text-muted-foreground hover:border-cyan-500/50"
+                      onClick={() => setActiveApp(tab.id)}
+                      className={`relative flex items-center gap-2 px-6 py-3 text-sm font-semibold rounded-xl transition-colors z-10 ${
+                        isActive
+                          ? "text-[#1DB896]"
+                          : "text-slate-500 dark:text-slate-300 hover:text-slate-700 dark:hover:text-slate-100"
                       }`}
                     >
+                      {isActive && (
+                        <motion.div
+                          layoutId="activeTab"
+                          className="absolute inset-0 bg-[#F0F9F7] dark:bg-[#0f1f1c] rounded-xl -z-10"
+                          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                        />
+                      )}
+                      <Icon size={18} />
                       {tab.label}
                     </button>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
 
-              <div className="mt-6">
+              <div className="w-full relative min-h-[400px]">
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={activeApp}
@@ -227,6 +275,7 @@ export default function App() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
                     transition={{ duration: 0.25 }}
+                    className="w-full"
                   >
                     <Suspense
                       fallback={
@@ -238,7 +287,7 @@ export default function App() {
                   </motion.div>
                 </AnimatePresence>
               </div>
-            </section>
+            </div>
           </div>
         </main>
 

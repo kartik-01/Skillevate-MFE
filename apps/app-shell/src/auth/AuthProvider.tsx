@@ -8,8 +8,8 @@ interface Props {
 export const AuthProvider = ({ children }: Props) => {
   return (
     <Auth0Provider
-      domain="dev-dkdxpljfvflt1jgs.us.auth0.com"
-      clientId="lzbVOYeSERkab4468jFAYWUABT4VvjwM"
+      domain="skillevate.us.auth0.com"
+      clientId="zzG9pGUv9Ky29Lta4aI3YKCZiKQjk96q"
       authorizationParams={{
         redirect_uri: window.location.origin,
       }}
