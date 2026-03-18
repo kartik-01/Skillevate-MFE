@@ -1,7 +1,13 @@
 const path = require("path");
+require("dotenv").config({
+  path: path.resolve(__dirname, "../.env"),
+  quiet: true,
+});
+
 const HtmlWebpackPlugin = require("html-webpack-plugin");
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
-const { container } = require("webpack");
+const webpack = require("webpack");
+const { container } = webpack;
 const { ModuleFederationPlugin } = container;
 const {
   ModuleFederationPlugin: EnhancedModuleFederationPlugin,
@@ -71,6 +77,20 @@ function createWebpackConfig(options) {
       }),
       new MiniCssExtractPlugin({
         filename: isProd ? "[name].[contenthash].css" : "[name].css",
+      }),
+      new webpack.DefinePlugin({
+        "process.env.SKILLEVATE_RESUME_PARSER_URL": JSON.stringify(
+          process.env.SKILLEVATE_RESUME_PARSER_URL || "http://localhost:8001"
+        ),
+        "process.env.SKILLEVATE_JD_ANALYZER_URL": JSON.stringify(
+          process.env.SKILLEVATE_JD_ANALYZER_URL || "http://localhost:8000"
+        ),
+        "process.env.SKILLEVATE_RESUME_PARSER_INFERENCE": JSON.stringify(
+          process.env.SKILLEVATE_RESUME_PARSER_INFERENCE || "none"
+        ),
+        "process.env.SKILLEVATE_JD_ANALYZER_INFERENCE": JSON.stringify(
+          process.env.SKILLEVATE_JD_ANALYZER_INFERENCE || "groq"
+        ),
       }),
       useEnhancedRuntime
         ? new EnhancedModuleFederationPlugin({

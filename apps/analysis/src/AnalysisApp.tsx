@@ -1,6 +1,21 @@
 import React, { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Target, Upload, Zap, CheckCircle2, AlertTriangle, Trash2, Loader2 } from "lucide-react";
+import {
+  Target,
+  Upload,
+  Zap,
+  CheckCircle2,
+  AlertTriangle,
+  Trash2,
+  Loader2,
+} from "lucide-react";
+import {
+  analyzeResumeAgainstJobFile,
+  analyzeResumeAgainstJobText,
+  parseResumeSkills,
+  type NormalizedAnalysisResult,
+  type ParsedResumeSkills,
+} from "./services/analysisApi";
 
 type ResumeVersion = {
   id: string;
@@ -10,54 +25,60 @@ type ResumeVersion = {
   uploadedAt: string;
 };
 
-type AnalysisResult = {
-  matchPercent: number;
-  verifiedSkills: string[];
-  gaps: Array<{ name: string; priority: "High" | "Medium"; match: string }>;
-  createdAt: string;
-};
-
 type PersistedAnalysisState = {
   resumeVersions: ResumeVersion[];
   selectedResumeId: string;
-  analysisByResumeId: Record<string, AnalysisResult>;
+  analysisByResumeId: Record<string, NormalizedAnalysisResult>;
+  parsedResumeById: Record<string, ParsedResumeSkills>;
   jobDescription: string;
 };
 
 const ANALYSIS_STATE_STORAGE_KEY = "skillevate-analysis-state-v1";
 
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  return fallback;
+}
+
 export function AnalysisApp() {
   const currentUserName = "UserName";
 
-  const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [jobDescription, setJobDescription] = useState("");
   const [jobFile, setJobFile] = useState<File | null>(null);
   const [inputError, setInputError] = useState("");
   const [resumeVersions, setResumeVersions] = useState<ResumeVersion[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState<string>("");
-  const [analysisByResumeId, setAnalysisByResumeId] = useState<Record<string, AnalysisResult>>({});
-  const [resumePendingDelete, setResumePendingDelete] = useState<ResumeVersion | null>(null);
+  const [analysisByResumeId, setAnalysisByResumeId] = useState<
+    Record<string, NormalizedAnalysisResult>
+  >({});
+  const [parsedResumeById, setParsedResumeById] = useState<
+    Record<string, ParsedResumeSkills>
+  >({});
+  const [resumePendingDelete, setResumePendingDelete] =
+    useState<ResumeVersion | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isParsingResume, setIsParsingResume] = useState(false);
+  const [pendingResumeFileName, setPendingResumeFileName] = useState("");
 
   const resumeInputRef = useRef<HTMLInputElement | null>(null);
   const jobFileInputRef = useRef<HTMLInputElement | null>(null);
-  const analysisTimerRef = useRef<number | null>(null);
 
   const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
   const ACCEPTED_RESUME_EXTENSIONS = ["pdf", "doc", "docx"];
   const ACCEPTED_JOB_FILE_EXTENSIONS = ["txt", "pdf", "doc", "docx"];
 
-  const selectedResume = resumeVersions.find((resume) => resume.id === selectedResumeId) ?? null;
-  const selectedAnalysis = selectedResumeId ? analysisByResumeId[selectedResumeId] : undefined;
+  const selectedResume =
+    resumeVersions.find((resume) => resume.id === selectedResumeId) ?? null;
+  const selectedAnalysis = selectedResumeId
+    ? analysisByResumeId[selectedResumeId]
+    : undefined;
+  const selectedParsedResume = selectedResumeId
+    ? parsedResumeById[selectedResumeId]
+    : undefined;
   const hasAnyAnalysis = Object.keys(analysisByResumeId).length > 0;
-
-  useEffect(() => {
-    return () => {
-      if (analysisTimerRef.current !== null) {
-        window.clearTimeout(analysisTimerRef.current);
-      }
-    };
-  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -67,15 +88,19 @@ export function AnalysisApp() {
       if (!rawState) return;
 
       const parsed = JSON.parse(rawState) as PersistedAnalysisState;
-      const restoredResumes = Array.isArray(parsed.resumeVersions) ? parsed.resumeVersions : [];
+      const restoredResumes = Array.isArray(parsed.resumeVersions)
+        ? parsed.resumeVersions
+        : [];
       const restoredSelectedId =
-        restoredResumes.some((resume) => resume.id === parsed.selectedResumeId) && parsed.selectedResumeId
+        restoredResumes.some((resume) => resume.id === parsed.selectedResumeId) &&
+        parsed.selectedResumeId
           ? parsed.selectedResumeId
           : restoredResumes[restoredResumes.length - 1]?.id ?? "";
 
       setResumeVersions(restoredResumes);
       setSelectedResumeId(restoredSelectedId);
       setAnalysisByResumeId(parsed.analysisByResumeId ?? {});
+      setParsedResumeById(parsed.parsedResumeById ?? {});
       setJobDescription(parsed.jobDescription ?? "");
     } catch {
       // Ignore corrupted persisted state and continue with defaults.
@@ -89,13 +114,24 @@ export function AnalysisApp() {
       resumeVersions,
       selectedResumeId,
       analysisByResumeId,
+      parsedResumeById,
       jobDescription,
     };
 
-    window.localStorage.setItem(ANALYSIS_STATE_STORAGE_KEY, JSON.stringify(stateToPersist));
-  }, [resumeVersions, selectedResumeId, analysisByResumeId, jobDescription]);
+    window.localStorage.setItem(
+      ANALYSIS_STATE_STORAGE_KEY,
+      JSON.stringify(stateToPersist)
+    );
+  }, [
+    resumeVersions,
+    selectedResumeId,
+    analysisByResumeId,
+    parsedResumeById,
+    jobDescription,
+  ]);
 
-  const getFileExtension = (name: string) => name.split(".").pop()?.toLowerCase() ?? "";
+  const getFileExtension = (name: string) =>
+    name.split(".").pop()?.toLowerCase() ?? "";
 
   const isAllowedFileExtension = (file: File, allowedExtensions: string[]) => {
     const extension = getFileExtension(file.name);
@@ -112,39 +148,81 @@ export function AnalysisApp() {
     return true;
   };
 
-  const handleResumeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleResumeChange = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const file = event.target.files?.[0] ?? null;
-    if (!file) return;
+    event.target.value = "";
+
+    if (!file || isParsingResume) return;
 
     if (!isAllowedFileExtension(file, ACCEPTED_RESUME_EXTENSIONS)) {
       setInputError("Resume must be a .pdf, .doc, or .docx file.");
-      event.target.value = "";
       return;
     }
 
     if (!validateFileSize(file)) {
-      event.target.value = "";
       return;
     }
 
-    const nextVersion = resumeVersions.length + 1;
-    const resumeId =
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `resume-${Date.now()}`;
-
-    const newResume: ResumeVersion = {
-      id: resumeId,
-      version: nextVersion,
-      label: `${currentUserName}-Resume-v${nextVersion}`,
-      originalFileName: file.name,
-      uploadedAt: new Date().toISOString(),
-    };
-
-    setResumeVersions((previous) => [...previous, newResume]);
-    setSelectedResumeId(resumeId);
-    setResumeFile(file);
     setInputError("");
+    setIsParsingResume(true);
+    setPendingResumeFileName(file.name);
+
+    try {
+      const parsedResume = await parseResumeSkills(file);
+      const nextVersion =
+        resumeVersions.reduce((maxVersion, resume) => {
+          return Math.max(maxVersion, resume.version);
+        }, 0) + 1;
+      const resumeId =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `resume-${Date.now()}`;
+      const resumeOwnerName = parsedResume.name?.trim() || currentUserName;
+
+      const newResume: ResumeVersion = {
+        id: resumeId,
+        version: nextVersion,
+        label: `${resumeOwnerName}-Resume-v${nextVersion}`,
+        originalFileName: file.name,
+        uploadedAt: new Date().toISOString(),
+      };
+
+      setResumeVersions((previous) => [...previous, newResume]);
+      setParsedResumeById((previous) => ({
+        ...previous,
+        [resumeId]: parsedResume,
+      }));
+      setSelectedResumeId(resumeId);
+    } catch (error) {
+      setInputError(
+        getErrorMessage(
+          error,
+          "We could not parse that resume. Please check that the PDF is valid and try again."
+        )
+      );
+    } finally {
+      setIsParsingResume(false);
+      setPendingResumeFileName("");
+    }
+  };
+
+  const handleJobDescriptionChange = (
+    event: React.ChangeEvent<HTMLTextAreaElement>
+  ) => {
+    const nextJobDescription = event.target.value;
+
+    setJobDescription(nextJobDescription);
+    setInputError("");
+
+    if (nextJobDescription.trim().length > 0 && jobFile) {
+      setJobFile(null);
+
+      if (jobFileInputRef.current) {
+        jobFileInputRef.current.value = "";
+      }
+    }
   };
 
   const handleJobFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -152,7 +230,7 @@ export function AnalysisApp() {
     if (!file) return;
 
     if (!isAllowedFileExtension(file, ACCEPTED_JOB_FILE_EXTENSIONS)) {
-      setInputError("Job description file must be .txt, .pdf, .doc, or .docx.");
+      setInputError("Job description file must be .txt, .pdf, or .docx.");
       event.target.value = "";
       return;
     }
@@ -163,52 +241,63 @@ export function AnalysisApp() {
     }
 
     setJobFile(file);
+    setJobDescription("");
     setInputError("");
   };
 
   const canRunAnalysis =
-    !isAnalyzing && Boolean(selectedResumeId) && (jobDescription.trim().length > 0 || Boolean(jobFile));
+    !isAnalyzing &&
+    Boolean(selectedResumeId) &&
+    Boolean(selectedParsedResume) &&
+    (jobDescription.trim().length > 0 || Boolean(jobFile));
 
-  const handleRunAnalysis = () => {
+  const handleRunAnalysis = async () => {
     if (isAnalyzing) return;
 
-    if (!selectedResumeId) {
+    if (!selectedResumeId || !selectedResume) {
       setInputError("Please upload and select a resume before running analysis.");
       return;
     }
 
+    if (!selectedParsedResume) {
+      setInputError(
+        "This resume is not ready for live analysis yet. Upload a PDF resume and wait for parsing to finish."
+      );
+      return;
+    }
+
     if (jobDescription.trim().length === 0 && !jobFile) {
-      setInputError("Provide job description text or upload a job description file.");
+      setInputError(
+        "Provide job description text or upload a job description file."
+      );
       return;
     }
 
     setInputError("");
     setIsAnalyzing(true);
 
-    const runResumeId = selectedResumeId;
-    const selectedVersion = resumeVersions.find((resume) => resume.id === runResumeId)?.version ?? 1;
-
-    analysisTimerRef.current = window.setTimeout(() => {
-      const generatedMatch = Math.min(95, 65 + selectedVersion * 5);
-
-      const generatedResult: AnalysisResult = {
-        matchPercent: generatedMatch,
-        verifiedSkills: ["React.js", "JavaScript", "Tailwind CSS", "Git", "RESTful APIs"],
-        gaps: [
-          { name: "GraphQL", priority: "High", match: "0%" },
-          { name: "System Design", priority: "High", match: "10%" },
-          { name: "Advanced TypeScript", priority: "Medium", match: "40%" },
-        ],
-        createdAt: new Date().toISOString(),
-      };
+    try {
+      const generatedResult = jobFile
+        ? await analyzeResumeAgainstJobFile(selectedParsedResume, jobFile)
+        : await analyzeResumeAgainstJobText(
+            selectedParsedResume,
+            jobDescription.trim()
+          );
 
       setAnalysisByResumeId((previous) => ({
         ...previous,
-        [runResumeId]: generatedResult,
+        [selectedResumeId]: generatedResult,
       }));
+    } catch (error) {
+      setInputError(
+        getErrorMessage(
+          error,
+          "We could not analyze that job description. Please try again."
+        )
+      );
+    } finally {
       setIsAnalyzing(false);
-      analysisTimerRef.current = null;
-    }, 3000);
+    }
   };
 
   const handleDeleteResume = () => {
@@ -221,7 +310,9 @@ export function AnalysisApp() {
     if (!resumePendingDelete) return;
 
     const resumeIdToDelete = resumePendingDelete.id;
-    const remainingResumes = resumeVersions.filter((resume) => resume.id !== resumeIdToDelete);
+    const remainingResumes = resumeVersions.filter(
+      (resume) => resume.id !== resumeIdToDelete
+    );
 
     setResumePendingDelete(null);
     setResumeVersions(remainingResumes);
@@ -230,10 +321,14 @@ export function AnalysisApp() {
       delete next[resumeIdToDelete];
       return next;
     });
+    setParsedResumeById((previous) => {
+      const next = { ...previous };
+      delete next[resumeIdToDelete];
+      return next;
+    });
 
     if (remainingResumes.length === 0) {
       setSelectedResumeId("");
-      setResumeFile(null);
       return;
     }
 
@@ -244,25 +339,36 @@ export function AnalysisApp() {
   return (
     <div className="space-y-6 animate-slide-in-up">
       <div className="glass-card rounded-3xl p-6 border border-border/60">
-        <h2 className="text-lg font-semibold text-foreground mb-4">Input Data</h2>
+        <h2 className="text-lg font-semibold text-foreground mb-4">
+          Input Data
+        </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <button
             type="button"
-            className="border-2 border-dashed border-border rounded-2xl p-6 flex flex-col items-center justify-center text-center hover:border-primary/70 transition-colors cursor-pointer bg-secondary/30"
+            disabled={isParsingResume}
+            className="border-2 border-dashed border-border rounded-2xl p-6 flex flex-col items-center justify-center text-center hover:border-primary/70 transition-colors cursor-pointer bg-secondary/30 disabled:opacity-70 disabled:cursor-not-allowed"
             onClick={() => resumeInputRef.current?.click()}
           >
             <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm text-[#1DB896] mb-3">
-              <Upload size={20} />
+              {isParsingResume ? (
+                <Loader2 size={20} className="animate-spin" />
+              ) : (
+                <Upload size={20} />
+              )}
             </div>
-            <p className="text-sm font-semibold text-foreground">Upload Resume</p>
-            <p className="text-xs text-muted-foreground mt-1">PDF or DOCX (Max 5MB)</p>
+            <p className="text-sm font-semibold text-foreground">
+              {isParsingResume ? "Parsing Resume" : "Upload Resume"}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              PDF, DOC, or DOCX (Max 5MB)
+            </p>
             <p className="text-xs text-muted-foreground mt-3 truncate max-w-full">
               {selectedResume
                 ? `Selected: ${selectedResume.label} (${selectedResume.originalFileName})`
-                : resumeFile
-                ? `Selected: ${resumeFile.name}`
-                : "No file selected"}
+                : pendingResumeFileName
+                  ? `Uploading: ${pendingResumeFileName}`
+                  : "No file selected"}
             </p>
           </button>
 
@@ -274,7 +380,7 @@ export function AnalysisApp() {
 
             <textarea
               value={jobDescription}
-              onChange={(event) => setJobDescription(event.target.value)}
+              onChange={handleJobDescriptionChange}
               placeholder="Paste job description text here"
               rows={5}
               className="w-full rounded-xl border border-border px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary bg-background"
@@ -293,7 +399,9 @@ export function AnalysisApp() {
             </button>
 
             <p className="text-xs text-muted-foreground mt-2 truncate max-w-full">
-              {jobFile ? `Selected: ${jobFile.name}` : "Accepted: .txt, .pdf, .doc, .docx"}
+              {jobFile
+                ? `Selected: ${jobFile.name}`
+                : "Accepted: .txt, .pdf, .docx"}
             </p>
           </div>
         </div>
@@ -310,11 +418,44 @@ export function AnalysisApp() {
           ref={jobFileInputRef}
           type="file"
           className="hidden"
-          accept=".txt,.pdf,.doc,.docx,text/plain,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          accept=".txt,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           onChange={handleJobFileChange}
         />
 
-        {inputError ? <p className="text-sm text-destructive mt-3">{inputError}</p> : null}
+        {isParsingResume ? (
+          <div className="mt-3 rounded-2xl border border-primary/20 bg-accent/40 px-4 py-3">
+            <p className="text-sm font-semibold text-foreground">
+              Parsing {pendingResumeFileName}...
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              You can keep editing the job description while resume parsing runs.
+            </p>
+          </div>
+        ) : selectedResume && selectedParsedResume ? (
+          <div className="mt-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3">
+            <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+              Resume parsed and ready for analysis.
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {selectedParsedResume.strong.length} strong skills and{" "}
+              {selectedParsedResume.listed.length} listed skills captured for this
+              version.
+            </p>
+          </div>
+        ) : selectedResume ? (
+          <div className="mt-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3">
+            <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+              Parsed resume data is not available for this saved version.
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Re-upload the resume PDF if you want to run live analysis again.
+            </p>
+          </div>
+        ) : null}
+
+        {inputError ? (
+          <p className="text-sm text-destructive mt-3">{inputError}</p>
+        ) : null}
 
         <div className="mt-4 flex justify-center">
           <button
@@ -323,7 +464,11 @@ export function AnalysisApp() {
             onClick={handleRunAnalysis}
             className="gradient-primary hover:opacity-90 text-white py-3 px-6 rounded-xl font-semibold text-sm transition-all shadow-sm hover:shadow-lg hover:shadow-cyan-500/30 inline-flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isAnalyzing ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
+            {isAnalyzing ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <Zap size={16} />
+            )}
             {isAnalyzing ? "Running Analysis..." : "Run AI Analysis"}
           </button>
         </div>
@@ -332,7 +477,9 @@ export function AnalysisApp() {
       {hasAnyAnalysis || isAnalyzing ? (
         <div className="glass-card rounded-3xl p-6 border border-border/60 h-full">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
-            <h2 className="text-lg font-semibold text-foreground">Gap Analysis Results</h2>
+            <h2 className="text-lg font-semibold text-foreground">
+              Gap Analysis Results
+            </h2>
 
             {selectedAnalysis ? (
               <div className="px-3 py-1 bg-accent text-primary rounded-full text-sm font-semibold border border-primary/20 w-fit">
@@ -342,13 +489,15 @@ export function AnalysisApp() {
           </div>
 
           <div className="mb-5 flex items-center gap-2 flex-wrap">
-            <span className="text-sm text-muted-foreground">Viewing analysis for</span>
+            <span className="text-sm text-muted-foreground">
+              Viewing analysis for
+            </span>
             {resumeVersions.length > 1 ? (
               <select
                 id="results-resume-selector"
                 value={selectedResumeId}
                 onChange={(event) => setSelectedResumeId(event.target.value)}
-                disabled={isAnalyzing}
+                disabled={isAnalyzing || isParsingResume}
                 className="w-full md:w-auto rounded-lg border border-border px-3 py-1.5 text-sm font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary bg-background"
                 aria-label="Viewing analysis for resume version"
               >
@@ -359,13 +508,15 @@ export function AnalysisApp() {
                 ))}
               </select>
             ) : (
-              <span className="text-sm font-semibold text-foreground">{selectedResume?.label ?? "selected resume"}</span>
+              <span className="text-sm font-semibold text-foreground">
+                {selectedResume?.label ?? "selected resume"}
+              </span>
             )}
 
             <button
               type="button"
               onClick={handleDeleteResume}
-              disabled={isAnalyzing}
+              disabled={isAnalyzing || isParsingResume}
               className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-destructive/30 bg-destructive/10 px-2.5 py-1.5 text-xs font-semibold text-destructive hover:bg-destructive/20 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               aria-label="Delete selected resume"
             >
@@ -379,8 +530,13 @@ export function AnalysisApp() {
               <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-card shadow-sm text-primary mb-4">
                 <Loader2 size={20} className="animate-spin" />
               </div>
-              <p className="text-foreground font-semibold">Analyzing {selectedResume?.label ?? "selected resume"}...</p>
-              <p className="text-sm text-muted-foreground mt-2">This usually takes a few seconds. Preparing your gap analysis now.</p>
+              <p className="text-foreground font-semibold">
+                Analyzing {selectedResume?.label ?? "selected resume"}...
+              </p>
+              <p className="text-sm text-muted-foreground mt-2">
+                This usually takes a few seconds. Preparing your gap analysis
+                now.
+              </p>
             </div>
           ) : selectedAnalysis ? (
             <div className="space-y-8">
@@ -419,8 +575,12 @@ export function AnalysisApp() {
                           <Target size={16} />
                         </div>
                         <div>
-                          <p className="font-bold text-foreground">{gap.name}</p>
-                          <p className="text-xs text-muted-foreground">Requires upskilling</p>
+                          <p className="font-bold text-foreground">
+                            {gap.name}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Requires upskilling
+                          </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
@@ -441,8 +601,12 @@ export function AnalysisApp() {
             </div>
           ) : (
             <div className="rounded-2xl border border-dashed border-border bg-secondary/30 p-6 text-center">
-              <p className="text-foreground font-semibold">No analysis yet for this resume.</p>
-              <p className="text-sm text-muted-foreground mt-2">Provide job description input and click Run AI Analysis.</p>
+              <p className="text-foreground font-semibold">
+                No analysis yet for this resume.
+              </p>
+              <p className="text-sm text-muted-foreground mt-2">
+                Provide job description input and click Run AI Analysis.
+              </p>
             </div>
           )}
         </div>
@@ -466,13 +630,20 @@ export function AnalysisApp() {
               exit={{ opacity: 0, y: 8, scale: 0.97 }}
               transition={{ duration: 0.18, ease: "easeOut" }}
             >
-              <h3 id="delete-resume-title" className="text-lg font-semibold text-foreground">
+              <h3
+                id="delete-resume-title"
+                className="text-lg font-semibold text-foreground"
+              >
                 Delete Resume Version?
               </h3>
               <p className="mt-2 text-sm text-muted-foreground">
                 Are you sure you want to delete
-                <span className="font-semibold text-foreground"> {resumePendingDelete.label}</span>? This will also remove
-                its analysis result.
+                <span className="font-semibold text-foreground">
+                  {" "}
+                  {resumePendingDelete.label}
+                </span>
+                ? This will also remove its parsed resume data and analysis
+                result.
               </p>
 
               <div className="mt-5 flex justify-end gap-2">
