@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { PlaySquare, BookOpen, ArrowUpRight, Loader2, AlertTriangle, CheckCircle2 } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { PlaySquare, BookOpen, ArrowUpRight, Loader2, AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
 
 type ResumeVersion = {
   id: string;
@@ -28,12 +28,20 @@ type Course = {
   title: string;
   url: string;
   target: string;
+  skill: string;
   subtitle: string;
   description: string;
   provider: string;
+  providerDetail: string;
   thumbnail: string;
   duration: string;
   xp: number;
+};
+
+type SkillPage = {
+  skill: string;
+  total_results: number;
+  recommendations: Course[];
 };
 
 type ApiRecommendation = {
@@ -114,21 +122,35 @@ function getRandomPlaceholderImage(skill: string) {
   return reactImg;
 }
 
-function mapApiToCourses(apiResponse: ApiResponse): Course[] {
-  return apiResponse.results.flatMap((item) =>
-    item.recommendations.map((rec) => ({
+function mapApiToSkillPages(apiResponse: ApiResponse): SkillPage[] {
+  return apiResponse.results.map((item) => ({
+    skill: item.skill,
+    total_results: item.total_results,
+    recommendations: item.recommendations.map((rec) => ({
       id: rec.id,
       title: rec.title,
       url: rec.url,
       target: item.skill,
+      skill: item.skill,
       subtitle: rec.channel_name || rec.org_login || rec.provider,
       description: rec.description,
       provider: rec.provider,
+      providerDetail: rec.channel_name || rec.org_login || rec.provider,
       thumbnail: getRandomPlaceholderImage(item.skill),
       duration: "N/A",
       xp: Math.max(40, Math.round((rec.relevance_score || 0.2) * 200)),
-    }))
-  );
+    })),
+  }));
+}
+
+function mapFallbackToSkillPages(courses: Course[]): SkillPage[] {
+  return [
+    {
+      skill: "Recommended",
+      total_results: courses.length,
+      recommendations: courses,
+    },
+  ];
 }
 
 function fallbackCourseRecommendations(gaps: AnalysisResult["gaps"]): Course[] {
@@ -141,9 +163,11 @@ function fallbackCourseRecommendations(gaps: AnalysisResult["gaps"]): Course[] {
       title: "Advanced TypeScript for React Developers",
       url: "#",
       target: "Advanced TypeScript",
+      skill: "Advanced TypeScript",
       subtitle: "Code Mastery",
       description: "Hands-on TS for React developers.",
       provider: "Code Mastery",
+      providerDetail: "Code Mastery",
       thumbnail: reactImg,
       duration: "1h 45m",
       xp: 150,
@@ -156,9 +180,11 @@ function fallbackCourseRecommendations(gaps: AnalysisResult["gaps"]): Course[] {
       title: "System Design Interview: Frontend Concepts",
       url: "#",
       target: "System Design",
+      skill: "System Design",
       subtitle: "Tech Interview Pro",
       description: "System design oriented for frontend engineers.",
       provider: "Tech Interview Pro",
+      providerDetail: "Tech Interview Pro",
       thumbnail: uiImg,
       duration: "45m",
       xp: 100,
@@ -171,9 +197,11 @@ function fallbackCourseRecommendations(gaps: AnalysisResult["gaps"]): Course[] {
       title: "GraphQL APIs with Node.js & Apollo",
       url: "#",
       target: "GraphQL",
+      skill: "GraphQL",
       subtitle: "Backend Simplified",
       description: "Build GraphQL APIs with Node and Apollo.",
       provider: "Backend Simplified",
+      providerDetail: "Backend Simplified",
       thumbnail: nodeImg,
       duration: "2h 15m",
       xp: 200,
@@ -186,9 +214,11 @@ function fallbackCourseRecommendations(gaps: AnalysisResult["gaps"]): Course[] {
       title: "Modern Frontend Interview Preparation",
       url: "#",
       target: "General Upskilling",
+      skill: "General Upskilling",
       subtitle: "Career Sprint",
       description: "General interview prep for frontend roles.",
       provider: "Career Sprint",
+      providerDetail: "Career Sprint",
       thumbnail: reactImg,
       duration: "1h 20m",
       xp: 120,
@@ -198,11 +228,16 @@ function fallbackCourseRecommendations(gaps: AnalysisResult["gaps"]): Course[] {
   return courses;
 }
 
-async function fetchSkillRecommendations(skills: string[], onResults: (courses: Course[]) => void, onError: () => void) {
+type SkillRequest = {
+  skill: string;
+  preferences: string[];
+};
+
+async function fetchSkillRecommendations(skills: SkillRequest[], onResults: (pages: SkillPage[]) => void, onError: () => void) {
   try {
     const body = {
-      skills: skills.map((skill) => ({ skill, preferences: [] })),
-      max_results: 5,
+      skills,
+      max_results: 10,
       language: "en",
     };
 
@@ -219,7 +254,7 @@ async function fetchSkillRecommendations(skills: string[], onResults: (courses: 
     }
 
     const apiData = (await response.json()) as ApiResponse;
-    onResults(mapApiToCourses(apiData));
+    onResults(mapApiToSkillPages(apiData));
   } catch (error) {
     console.error("Failed to fetch learning path recommendations:", error);
     onError();
@@ -230,9 +265,8 @@ export function LearningApp() {
   const [resumeVersions, setResumeVersions] = useState<ResumeVersion[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState("");
   const [analysisByResumeId, setAnalysisByResumeId] = useState<Record<string, AnalysisResult>>({});
-  const [recommendedCourses, setRecommendedCourses] = useState<Course[]>([]);
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 5;
+  const [skillPages, setSkillPages] = useState<SkillPage[]>([]);
+  const [currentSkillIndex, setCurrentSkillIndex] = useState(0);
   const [isLoadingCourses, setIsLoadingCourses] = useState(false);
   const [earnedXp, setEarnedXp] = useState(0);
   const [completedCourseIds, setCompletedCourseIds] = useState<string[]>([]);
@@ -287,37 +321,58 @@ export function LearningApp() {
   );
   const selectedAnalysis = selectedResumeId ? analysisByResumeId[selectedResumeId] : undefined;
 
-  const totalPages = Math.max(1, Math.ceil(recommendedCourses.length / itemsPerPage));
-  const paginatedCourses = useMemo(
-    () => recommendedCourses.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage),
-    [recommendedCourses, currentPage, itemsPerPage],
-  );
+  const carouselRef = useRef<HTMLDivElement | null>(null);
+  const [currentRecommendationIndex, setCurrentRecommendationIndex] = useState(0);
+
+  const totalSkillPages = Math.max(1, skillPages.length);
+  const currentSkillPage = skillPages[currentSkillIndex] ?? null;
+  const totalCourses = skillPages.reduce((sum, page) => sum + page.recommendations.length, 0);
 
   useEffect(() => {
     if (!selectedAnalysis) {
-      setRecommendedCourses([]);
+      setSkillPages([]);
+      setCurrentSkillIndex(0);
       return;
     }
 
     setIsLoadingCourses(true);
 
-    const preferredSkills = ["python", "docker"];
-    // If you want to adapt to gap analysis skills, use selectedAnalysis.gaps map to skill names
+    const skillRequests = [
+      { skill: "python", preferences: ["FastAPI", "Backend Developer", "APIs", "advanced"] },
+      { skill: "docker", preferences: ["devops", "containers", "intermediate"] },
+    ];
+
     fetchSkillRecommendations(
-      preferredSkills,
-      (courses) => {
-        setRecommendedCourses(courses);
-        setCurrentPage(1);
+      skillRequests,
+      (pages) => {
+        setSkillPages(pages);
+        setCurrentSkillIndex(0);
+        setCurrentRecommendationIndex(0);
         setIsLoadingCourses(false);
       },
       () => {
         const fallback = fallbackCourseRecommendations(selectedAnalysis.gaps);
-        setRecommendedCourses(fallback);
-        setCurrentPage(1);
+        setSkillPages(mapFallbackToSkillPages(fallback));
+        setCurrentSkillIndex(0);
+        setCurrentRecommendationIndex(0);
         setIsLoadingCourses(false);
       }
     );
   }, [selectedAnalysis]);
+
+  useEffect(() => {
+    setCurrentRecommendationIndex(0);
+  }, [currentSkillIndex]);
+
+  useEffect(() => {
+    if (!currentSkillPage || !carouselRef.current) return;
+
+    const cards = carouselRef.current.querySelectorAll<HTMLDivElement>(".recommendation-card");
+    const activeCard = cards[currentRecommendationIndex];
+    if (activeCard) {
+      activeCard.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    }
+  }, [currentRecommendationIndex, currentSkillPage]);
 
   useEffect(() => {
     if (!completionFeedback) return;
@@ -371,7 +426,7 @@ export function LearningApp() {
   }
 
   return (
-    <div className="space-y-6 animate-slide-in-up">
+    <div className="space-y-6 animate-slide-in-up max-w-2xl mx-auto">
       <div className="glass-card rounded-3xl p-6 border border-border/60 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-foreground">Recommended Learning Path</h2>
@@ -400,7 +455,7 @@ export function LearningApp() {
             </div>
             <div className="hidden sm:flex items-center gap-2 text-sm font-semibold text-primary bg-accent px-4 py-2 rounded-xl">
               <BookOpen size={16} />
-              {recommendedCourses.length} total courses • page {currentPage}/{totalPages} • {earnedXp} XP Earned
+              {totalCourses} recommendations • skill {currentSkillIndex + 1}/{totalSkillPages} • {earnedXp} XP Earned
             </div>
           </div>
 
@@ -452,90 +507,170 @@ export function LearningApp() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {paginatedCourses.map((course) => (
-              <div
-                key={course.id}
-                className="glass-card rounded-3xl overflow-hidden border border-border/60 hover:shadow-md transition-shadow group flex flex-col"
-              >
-              <div className="relative h-48 overflow-hidden">
-                <CourseImage src={course.thumbnail} alt={course.title} />
-                <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <div className="w-14 h-14 bg-[#1DB896] rounded-full flex items-center justify-center text-white shadow-lg transform scale-90 group-hover:scale-100 transition-transform">
-                    <PlaySquare size={24} className="ml-1" />
-                  </div>
-                </div>
-                <div className="absolute bottom-3 right-3 bg-black/70 text-white text-xs font-bold px-2 py-1 rounded-md backdrop-blur-sm">
-                  {course.duration}
-                </div>
-              </div>
+          {/* Skill header + carousel together — capped to viewport so both fit without scrolling */}
+          <div className="flex flex-col gap-3" style={{ maxHeight: "calc(100vh - 320px)", minHeight: 0 }}>
 
-              <div className="p-6 flex-1 flex flex-col">
-                <div className="flex items-start justify-between mb-3 gap-2">
-                  <span className="text-xs font-bold text-[#1DB896] bg-[#F0F9F7] px-2 py-1 rounded-md line-clamp-1 border border-[#1DB896]/20">
-                    Target: {course.target}
-                  </span>
-                  <span className="flex items-center text-xs font-bold text-amber-500 bg-amber-50 px-2 py-1 rounded-md whitespace-nowrap">
-                    +{course.xp} XP
-                  </span>
-                </div>
-                <h3 className="font-semibold text-foreground leading-tight mb-2 line-clamp-2">
-                  <a href={course.url} target="_blank" rel="noreferrer" className="hover:text-primary transition-colors">
-                    {course.title}
-                  </a>
+          <div className="glass-card rounded-2xl p-4 border border-border/60 flex-shrink-0">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-foreground">
+                  {currentSkillPage?.skill ?? "Skill Recommendations"}
                 </h3>
-                <div className="inline-flex items-center gap-2 mb-2">
-                  <span className="text-xs font-bold uppercase tracking-widest text-blue-800 bg-blue-100 border border-blue-200 px-2 py-1 rounded-md">
-                    Platform: {course.provider}
-                  </span>
-                </div>
-                <p className="text-sm text-muted-foreground mb-2">{course.subtitle}</p>
-                <p className="text-sm text-muted-foreground mb-4 flex-1 line-clamp-3">{course.description}</p>
-
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {currentSkillPage?.total_results ?? 0} recommendations · viewing {currentRecommendationIndex + 1} of {currentSkillPage?.recommendations.length ?? 0}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => window.open(course.url, "_blank")}
-                  className="w-full py-3 border-2 border-border text-foreground rounded-xl font-semibold text-sm hover:border-primary hover:text-primary transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                  onClick={() => setCurrentSkillIndex((prev) => Math.max(0, prev - 1))}
+                  disabled={currentSkillIndex === 0}
+                  className="px-3 py-1.5 rounded-lg border border-border bg-background text-xs font-semibold hover:bg-slate-100 disabled:opacity-50"
                 >
-                  Start Course <ArrowUpRight size={16} />
+                  Prev Skill
                 </button>
-
+                <span className="text-xs text-muted-foreground">
+                  {currentSkillIndex + 1} / {totalSkillPages}
+                </span>
                 <button
                   type="button"
-                  onClick={() => markCourseCompleted(course)}
-                  disabled={completedCourseIds.includes(course.id)}
-                  className="mt-2 w-full py-3 rounded-xl font-semibold text-sm border transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 border-emerald-500/30 text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20"
+                  onClick={() => setCurrentSkillIndex((prev) => Math.min(totalSkillPages - 1, prev + 1))}
+                  disabled={currentSkillIndex === totalSkillPages - 1}
+                  className="px-3 py-1.5 rounded-lg border border-border bg-background text-xs font-semibold hover:bg-slate-100 disabled:opacity-50"
                 >
-                  {completedCourseIds.includes(course.id) ? "Completed" : `Mark as Completed (+${course.xp} XP)`}
+                  Next Skill
                 </button>
               </div>
             </div>
-          ))}
-        </div>
+          </div>
 
-          {totalPages > 1 ? (
-            <div className="mt-6 flex items-center justify-center gap-2">
-              <button
-                type="button"
-                onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                disabled={currentPage === 1}
-                className="px-3 py-2 rounded-lg border border-border bg-background text-sm font-semibold hover:bg-slate-100 disabled:opacity-50"
+          <div className="flex items-center gap-3 flex-1 min-h-0">
+            {/* Left arrow */}
+            <button
+              type="button"
+              onClick={() => setCurrentRecommendationIndex((prev) => Math.max(0, prev - 1))}
+              disabled={currentRecommendationIndex === 0}
+              className="flex-shrink-0 flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white shadow-md text-slate-700 transition hover:bg-slate-100 disabled:opacity-30 focus:outline-none focus:ring-2 focus:ring-primary"
+              aria-label="Previous recommendation"
+            >
+              <ChevronLeft size={18} />
+            </button>
+
+            {/* Scroll track */}
+            <div className="flex-1 min-w-0 overflow-hidden rounded-2xl border border-border/60 h-full">
+              <div
+                ref={carouselRef}
+                className="flex w-full h-full overflow-x-auto scroll-smooth snap-x snap-mandatory"
+                style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
               >
-                Prev
-              </button>
-              <span className="text-sm text-muted-foreground">
-                Page {currentPage} of {totalPages}
-              </span>
-              <button
-                type="button"
-                onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                disabled={currentPage === totalPages}
-                className="px-3 py-2 rounded-lg border border-border bg-background text-sm font-semibold hover:bg-slate-100 disabled:opacity-50"
-              >
-                Next
-              </button>
+                {currentSkillPage?.recommendations.map((course) => (
+                  <div
+                    key={course.id}
+                    className="recommendation-card w-full flex-shrink-0 snap-start flex items-center justify-center p-4"
+                    style={{ minWidth: "100%" }}
+                  >
+                  <div className="w-full max-w-sm glass-card rounded-2xl overflow-hidden border border-border/60 group flex flex-col hover:shadow-lg transition-shadow">
+                    {/* Thumbnail */}
+                    <div className="relative h-20 overflow-hidden flex-shrink-0">
+                      <CourseImage src={course.thumbnail} alt={course.title} />
+                      <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="w-9 h-9 bg-[#1DB896] rounded-full flex items-center justify-center text-white shadow-lg transform scale-90 group-hover:scale-100 transition-transform">
+                          <PlaySquare size={16} className="ml-0.5" />
+                        </div>
+                      </div>
+                      <div className="absolute bottom-1.5 right-1.5 bg-black/70 text-white text-xs font-bold px-1.5 py-0.5 rounded backdrop-blur-sm">
+                        {course.duration}
+                      </div>
+                    </div>
+
+                    {/* Body */}
+                    <div className="p-3 flex flex-col gap-2">
+
+                      {/* Target skill + XP */}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-[#1DB896] bg-[#F0F9F7] px-2 py-0.5 rounded border border-[#1DB896]/20 truncate max-w-[60%]">
+                          {course.target}
+                        </span>
+                        <span className="text-xs font-bold text-amber-500 bg-amber-50 px-2 py-0.5 rounded whitespace-nowrap">
+                          +{course.xp} XP
+                        </span>
+                      </div>
+
+                      {/* Title */}
+                      <h3 className="font-semibold text-foreground text-sm leading-snug line-clamp-2 min-h-[2.5rem]">
+                        <a href={course.url} target="_blank" rel="noreferrer" className="hover:text-primary transition-colors">
+                          {course.title}
+                        </a>
+                      </h3>
+
+                      {/* Creator */}
+                      <div className="flex items-center gap-1.5 h-5">
+                        <span className="text-xs font-semibold text-white bg-[#1DB896] px-2 py-0.5 rounded-full truncate max-w-[70%]">
+                          {course.providerDetail || course.provider}
+                        </span>
+                        {course.providerDetail && course.providerDetail !== course.provider && (
+                          <span className="text-xs text-muted-foreground truncate">{course.provider}</span>
+                        )}
+                      </div>
+
+                      {/* Description — 2 lines default, scrollable on hover */}
+                      <div className="overflow-hidden transition-all duration-300 max-h-8 group-hover:max-h-24 group-hover:overflow-y-auto">
+                        <p className="text-xs text-muted-foreground leading-relaxed">{course.description}</p>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => window.open(course.url, "_blank")}
+                          className="flex-1 py-1.5 border-2 border-border text-foreground rounded-xl font-semibold text-xs hover:border-primary hover:text-primary transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                        >
+                          Start Course <ArrowUpRight size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => markCourseCompleted(course)}
+                          disabled={completedCourseIds.includes(course.id)}
+                          className="flex-1 py-1.5 rounded-xl font-semibold text-xs border transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 border-emerald-500/30 text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20"
+                        >
+                          {completedCourseIds.includes(course.id) ? "✓ Done" : `Mark Complete (+${course.xp} XP)`}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          ) : null}
+
+            {/* Right arrow */}
+            <button
+              type="button"
+              onClick={() => setCurrentRecommendationIndex((prev) => Math.min((currentSkillPage?.recommendations.length ?? 1) - 1, prev + 1))}
+              disabled={currentRecommendationIndex >= (currentSkillPage?.recommendations.length ?? 1) - 1}
+              className="flex-shrink-0 flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white shadow-md text-slate-700 transition hover:bg-slate-100 disabled:opacity-30 focus:outline-none focus:ring-2 focus:ring-primary"
+              aria-label="Next recommendation"
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
+
+          </div>
+
+          {/* Dot indicators */}
+          <div className="flex items-center justify-center gap-2">
+            {currentSkillPage?.recommendations.map((_, indicatorIndex) => (
+              <button
+                key={indicatorIndex}
+                type="button"
+                onClick={() => setCurrentRecommendationIndex(indicatorIndex)}
+                className={`h-2 rounded-full transition-all ${
+                  indicatorIndex === currentRecommendationIndex ? "w-10 bg-foreground" : "w-6 bg-slate-300"
+                }`}
+                aria-label={`Go to recommendation ${indicatorIndex + 1}`}
+              />
+            ))}
+          </div>
         </>
       )}
     </div>
