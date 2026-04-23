@@ -8,6 +8,12 @@ import Footer from "./landing/components/Footer";
 import Header from "./landing/components/Header";
 import { ThemeProvider } from "./landing/components/ThemeProvider";
 
+declare global {
+  interface Window {
+    __SKILLEVATE_GET_ACCESS_TOKEN__?: () => Promise<string>;
+  }
+}
+
 if (module && (module as any).hot) {
   (module as any).hot.addStatusHandler((status: string) => {
     if (status === "abort" || status === "fail") {
@@ -30,6 +36,7 @@ export default function App() {
     user,
     loginWithRedirect,
     logout,
+    getAccessTokenSilently,
   } = useAuth0();
 
   type ActiveApp = "recommendation" | "gamify" | "analysis";
@@ -130,6 +137,21 @@ export default function App() {
       window.location.hash = hashMap[activeApp];
     }
   }, [activeApp, isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      delete window.__SKILLEVATE_GET_ACCESS_TOKEN__;
+      return;
+    }
+
+    window.__SKILLEVATE_GET_ACCESS_TOKEN__ = async () => {
+      return getAccessTokenSilently();
+    };
+
+    return () => {
+      delete window.__SKILLEVATE_GET_ACCESS_TOKEN__;
+    };
+  }, [getAccessTokenSilently, isAuthenticated]);
 
   // Render selected MFE
   const renderSelectedApp = () => {

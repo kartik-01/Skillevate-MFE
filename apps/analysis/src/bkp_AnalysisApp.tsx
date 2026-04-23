@@ -1,8 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Target, Upload, Zap, CheckCircle2, AlertTriangle, Trash2, Loader2 } from "lucide-react";
-// Updated imports to use the new lightning-fast pipeline functions
-import { analyzeDirect, extractJdFile, extractJdText, parseResumeSkills, ResumeSkills, JdSkillsResponse } from "./services/analysisApi";
+import { analyzeWithJdFile, analyzeWithJdText, parseResumeSkills, ResumeSkills } from "./services/analysisApi";
 
 type ResumeVersion = {
   id: string;
@@ -28,13 +27,6 @@ type ResumeParseState = {
   error: string | null;
 };
 
-// NEW: State to track background JD extraction
-type JdExtractState = {
-  status: "idle" | "extracting" | "ready" | "error";
-  skills: JdSkillsResponse | null;
-  error: string | null;
-};
-
 type PersistedAnalysisState = {
   resumeVersions: ResumeVersion[];
   selectedResumeId: string;
@@ -52,15 +44,10 @@ export function AnalysisApp() {
   const [jobDescription, setJobDescription] = useState("");
   const [jobFile, setJobFile] = useState<File | null>(null);
   const [inputError, setInputError] = useState("");
-  
   const [resumeVersions, setResumeVersions] = useState<ResumeVersion[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState<string>("");
   const [analysisByResumeId, setAnalysisByResumeId] = useState<Record<string, AnalysisResult>>({});
-  
   const [resumeParseByResumeId, setResumeParseByResumeId] = useState<Record<string, ResumeParseState>>({});
-  // NEW: Initialize JD extraction state
-  const [jdExtractState, setJdExtractState] = useState<JdExtractState>({ status: "idle", skills: null, error: null });
-  
   const [resumePendingDelete, setResumePendingDelete] = useState<ResumeVersion | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
@@ -76,9 +63,9 @@ export function AnalysisApp() {
   const selectedResumeParseState = selectedResumeId ? resumeParseByResumeId[selectedResumeId] : undefined;
   const hasAnyAnalysis = Object.keys(analysisByResumeId).length > 0;
 
-  // Persistence Effects
   useEffect(() => {
     if (typeof window === "undefined") return;
+
     try {
       const rawState = window.localStorage.getItem(ANALYSIS_STATE_STORAGE_KEY);
       if (!rawState) return;
@@ -96,12 +83,13 @@ export function AnalysisApp() {
       setResumeParseByResumeId(parsed.resumeParseByResumeId ?? {});
       setJobDescription(parsed.jobDescription ?? "");
     } catch {
-      // Ignore corrupted persisted state
+      // Ignore corrupted persisted state and continue with defaults.
     }
   }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+
     const stateToPersist: PersistedAnalysisState = {
       resumeVersions,
       selectedResumeId,
@@ -109,33 +97,9 @@ export function AnalysisApp() {
       resumeParseByResumeId,
       jobDescription,
     };
+
     window.localStorage.setItem(ANALYSIS_STATE_STORAGE_KEY, JSON.stringify(stateToPersist));
   }, [resumeVersions, selectedResumeId, analysisByResumeId, resumeParseByResumeId, jobDescription]);
-
-  // NEW: Debounced effect to extract JD skills in the background when typing
-  useEffect(() => {
-    if (jobDescription.trim().length === 0) {
-      if (jdExtractState.status !== "idle") {
-        setJdExtractState({ status: "idle", skills: null, error: null });
-      }
-      return;
-    }
-
-    setJdExtractState((prev) => ({ ...prev, status: "extracting", error: null }));
-
-    // Wait 1.5 seconds after user stops typing before calling the API
-    const timeoutId = setTimeout(async () => {
-      try {
-        const extractedSkills = await extractJdText(jobDescription.trim());
-        setJdExtractState({ status: "ready", skills: extractedSkills, error: null });
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "JD extraction failed.";
-        setJdExtractState({ status: "error", skills: null, error: message });
-      }
-    }, 1500);
-
-    return () => clearTimeout(timeoutId);
-  }, [jobDescription]); // Re-runs when jobDescription text changes
 
   const getFileExtension = (name: string) => name.split(".").pop()?.toLowerCase() ?? "";
 
@@ -149,12 +113,14 @@ export function AnalysisApp() {
       setInputError("File size must be 5MB or less.");
       return false;
     }
+
     setInputError("");
     return true;
   };
 
   const clearSelectedAnalysis = () => {
     if (!selectedResumeId) return;
+
     setAnalysisByResumeId((previous) => {
       if (!previous[selectedResumeId]) return previous;
       const next = { ...previous };
@@ -179,7 +145,10 @@ export function AnalysisApp() {
     }
 
     const nextVersion = resumeVersions.length + 1;
-    const resumeId = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `resume-${Date.now()}`;
+    const resumeId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `resume-${Date.now()}`;
 
     const newResume: ResumeVersion = {
       id: resumeId,
@@ -199,7 +168,12 @@ export function AnalysisApp() {
     });
     setResumeParseByResumeId((previous) => ({
       ...previous,
-      [resumeId]: { status: "parsing", skills: null, parsedAt: null, error: null },
+      [resumeId]: {
+        status: "parsing",
+        skills: null,
+        parsedAt: null,
+        error: null,
+      },
     }));
     setInputError("");
     event.target.value = "";
@@ -208,14 +182,24 @@ export function AnalysisApp() {
       .then((skills) => {
         setResumeParseByResumeId((previous) => ({
           ...previous,
-          [resumeId]: { status: "ready", skills, parsedAt: new Date().toISOString(), error: null },
+          [resumeId]: {
+            status: "ready",
+            skills,
+            parsedAt: new Date().toISOString(),
+            error: null,
+          },
         }));
       })
       .catch((error: unknown) => {
         const message = error instanceof Error ? error.message : "Resume parsing failed.";
         setResumeParseByResumeId((previous) => ({
           ...previous,
-          [resumeId]: { status: "error", skills: null, parsedAt: null, error: message },
+          [resumeId]: {
+            status: "error",
+            skills: null,
+            parsedAt: null,
+            error: message,
+          },
         }));
         setInputError(`Resume parsing failed: ${message}`);
       });
@@ -239,26 +223,13 @@ export function AnalysisApp() {
     setJobFile(file);
     setInputError("");
     clearSelectedAnalysis();
-    
-    // NEW: Trigger Background JD Extraction for files
-    setJdExtractState({ status: "extracting", skills: null, error: null });
-    
-    extractJdFile(file)
-      .then((extractedSkills) => {
-        setJdExtractState({ status: "ready", skills: extractedSkills, error: null });
-      })
-      .catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : "JD File extraction failed.";
-        setJdExtractState({ status: "error", skills: null, error: message });
-      });
   };
 
-  // UPDATED: Require both background parsing tasks to be complete
   const canRunAnalysis =
     !isAnalyzing &&
     Boolean(selectedResumeId) &&
-    selectedResumeParseState?.status === "ready" &&
-    jdExtractState.status === "ready";
+    (jobDescription.trim().length > 0 || Boolean(jobFile)) &&
+    selectedResumeParseState?.status === "ready";
 
   const handleRunAnalysis = async () => {
     if (isAnalyzing) return;
@@ -268,14 +239,14 @@ export function AnalysisApp() {
       return;
     }
 
-    const parseState = selectedResumeId ? resumeParseByResumeId[selectedResumeId] : undefined;
-    if (!parseState || parseState.status !== "ready" || !parseState.skills) {
-      setInputError("Resume parsing is not ready yet. Please wait for background parsing to complete.");
+    if (jobDescription.trim().length === 0 && !jobFile) {
+      setInputError("Provide job description text or upload a job description file.");
       return;
     }
 
-    if (jdExtractState.status !== "ready" || !jdExtractState.skills) {
-      setInputError("Job Description extraction is not ready yet. Please wait for background extraction to complete.");
+    const parseState = selectedResumeId ? resumeParseByResumeId[selectedResumeId] : undefined;
+    if (!parseState || parseState.status !== "ready" || !parseState.skills) {
+      setInputError("Resume parsing is not ready yet. Please wait for background parsing to complete.");
       return;
     }
 
@@ -283,8 +254,10 @@ export function AnalysisApp() {
     setIsAnalyzing(true);
 
     try {
-      // 🔥 UPDATED: Call the lightning-fast direct endpoint with pre-fetched data
-      const apiResponse = await analyzeDirect(parseState.skills, jdExtractState.skills);
+      const apiResponse =
+        jobDescription.trim().length > 0
+          ? await analyzeWithJdText(jobDescription.trim(), parseState.skills)
+          : await analyzeWithJdFile(jobFile as File, parseState.skills);
 
       const matchedSkills = [
         ...(apiResponse.gap_analysis?.matched_strong ?? []),
@@ -322,6 +295,7 @@ export function AnalysisApp() {
 
   const handleDeleteResume = () => {
     if (!selectedResumeId || !selectedResume) return;
+
     setResumePendingDelete(selectedResume);
   };
 
@@ -357,10 +331,9 @@ export function AnalysisApp() {
   return (
     <div className="space-y-6 animate-slide-in-up">
       <div className="glass-card rounded-3xl p-6 border border-border/60">
-        <h2 className="text-lg font-semibold text-foreground mb-4">Get Started</h2>
+        <h2 className="text-lg font-semibold text-foreground mb-4">Input Data</h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Resume Upload Block */}
           <button
             type="button"
             className="border-2 border-dashed border-border rounded-2xl p-6 flex flex-col items-center justify-center text-center hover:border-primary/70 transition-colors cursor-pointer bg-secondary/30"
@@ -380,7 +353,6 @@ export function AnalysisApp() {
             </p>
           </button>
 
-          {/* JD Input Block */}
           <div className="border-2 border-dashed border-border rounded-2xl p-6 hover:border-primary/70 transition-colors bg-secondary/30">
             <div className="flex items-center gap-2 mb-3 text-foreground">
               <Target size={18} className="text-[#1DB896]" />
@@ -432,46 +404,24 @@ export function AnalysisApp() {
           onChange={handleJobFileChange}
         />
 
-        {/* Global Input Errors */}
         {inputError ? <p className="text-sm text-destructive mt-3">{inputError}</p> : null}
-        
-        {/* Background Task Indicators */}
-        <div className="mt-3 space-y-1">
-          {selectedResumeParseState?.status === "parsing" ? (
-            <p className="text-sm text-muted-foreground flex items-center gap-2">
-              <Loader2 size={14} className="animate-spin" /> Parsing {selectedResume?.label ?? "resume"} in background...
-            </p>
-          ) : null}
-          {selectedResumeParseState?.status === "error" ? (
-            <p className="text-sm text-destructive flex items-center gap-2">
-              <AlertTriangle size={14} /> Resume parsing failed. Please upload again.
-            </p>
-          ) : null}
-          {selectedResumeParseState?.status === "ready" ? (
-            <p className="text-sm text-emerald-500 flex items-center gap-2">
-              <CheckCircle2 size={14} /> Resume parsed and ready.
-            </p>
-          ) : null}
+        {selectedResumeParseState?.status === "parsing" ? (
+          <p className="text-sm text-muted-foreground mt-2">
+            Parsing {selectedResume?.label ?? "resume"} in background. You can prepare the job description while this runs.
+          </p>
+        ) : null}
+        {selectedResumeParseState?.status === "error" ? (
+          <p className="text-sm text-destructive mt-2">
+            {selectedResumeParseState.error ?? "Resume parsing failed. Please upload again."}
+          </p>
+        ) : null}
+        {selectedResumeParseState?.status === "ready" ? (
+          <p className="text-sm text-emerald-500 mt-2">
+            Resume parsed and ready for analysis.
+          </p>
+        ) : null}
 
-          {/* JD Extraction Status Indicators */}
-          {jdExtractState.status === "extracting" ? (
-            <p className="text-sm text-muted-foreground flex items-center gap-2">
-              <Loader2 size={14} className="animate-spin" /> Extracting job requirements in background...
-            </p>
-          ) : null}
-          {jdExtractState.status === "error" ? (
-            <p className="text-sm text-destructive flex items-center gap-2">
-              <AlertTriangle size={14} /> {jdExtractState.error ?? "JD extraction failed."}
-            </p>
-          ) : null}
-          {jdExtractState.status === "ready" ? (
-            <p className="text-sm text-emerald-500 flex items-center gap-2">
-              <CheckCircle2 size={14} /> Job requirements extracted and ready.
-            </p>
-          ) : null}
-        </div>
-
-        <div className="mt-6 flex justify-center">
+        <div className="mt-4 flex justify-center">
           <button
             type="button"
             disabled={!canRunAnalysis}
