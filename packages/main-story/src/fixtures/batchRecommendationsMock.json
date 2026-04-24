@@ -1,0 +1,122 @@
+{
+  "results": [
+    {
+      "skill": "python",
+      "total_results": 7,
+      "recommendations": [
+        {
+          "id": "youtube_CjUw68k7Peg",
+          "title": "Python FastAPI Tutorial 2026: Build High-Performance APIs",
+          "provider": "YouTube",
+          "url": "https://www.youtube.com/watch?v=CjUw68k7Peg",
+          "description": "FastAPI tutorial sample.",
+          "tags": ["python fastapi tutorial"],
+          "relevance_score": 0.2027,
+          "stars": null,
+          "forks": null,
+          "published_at": "2026-03-04T12:45:12Z",
+          "view_count": 19,
+          "like_count": 3,
+          "channel_id": "UCBYgfZQp6I-Bl9WNGx9l4jA",
+          "channel_name": "@ThePythonArchitect",
+          "org_login": null
+        },
+        {
+          "id": "youtube_azyVG0T1aVc",
+          "title": "OpenTelemetry: How distributed tracing really works with Python, FastAPI and requests",
+          "provider": "YouTube",
+          "url": "https://www.youtube.com/watch?v=azyVG0T1aVc",
+          "description": "OpenTelemetry with FastAPI.",
+          "tags": [],
+          "relevance_score": 0.2822,
+          "stars": null,
+          "forks": null,
+          "published_at": "2025-09-20T12:17:44Z",
+          "view_count": 2898,
+          "like_count": 70,
+          "channel_id": "UC2rCpcqVtfwddasPSAtIyxA",
+          "channel_name": "Adam Gardner",
+          "org_login": null
+        },
+        {
+          "id": "youtube_ED6PRjmXgBA",
+          "title": "Dockerize fastapi app - Python Framework inside docker container",
+          "provider": "YouTube",
+          "url": "https://www.youtube.com/watch?v=ED6PRjmXgBA",
+          "description": "FastAPI docker container.",
+          "tags": ["docker", "fastapi"],
+          "relevance_score": 0.2492,
+          "stars": null,
+          "forks": null,
+          "published_at": "2024-06-27T12:45:01Z",
+          "view_count": 21879,
+          "like_count": 645,
+          "channel_id": "UC_hG9fglfmShkwex1KVydHA",
+          "channel_name": "Bitfumes",
+          "org_login": null
+        }
+      ]
+    },
+    {
+      "skill": "docker",
+      "total_results": 8,
+      "recommendations": [
+        {
+          "id": "youtube_DaBxnaCwJ2s",
+          "title": "How Docker REALLY Works Under the Hood (Containers Explained)",
+          "provider": "YouTube",
+          "url": "https://www.youtube.com/watch?v=DaBxnaCwJ2s",
+          "description": "Docker internals.",
+          "tags": ["docker"],
+          "relevance_score": 0.2356,
+          "stars": null,
+          "forks": null,
+          "published_at": "2026-03-12T19:22:50Z",
+          "view_count": 74,
+          "like_count": 6,
+          "channel_id": "UCic1qKxKD2lBtJPmLcrmgVQ",
+          "channel_name": "DevOps Corner",
+          "org_login": null
+        },
+        {
+          "id": "github_499400876",
+          "title": "Cloud-DevOps-Learning-Resources",
+          "provider": "GitHub",
+          "url": "https://github.com/ahmedtariq01/Cloud-DevOps-Learning-Resources",
+          "description": "Books and notes related to Docker, K8s, DevOps.",
+          "tags": ["docker", "devops"],
+          "relevance_score": 0.2419,
+          "stars": 1904,
+          "forks": 648,
+          "published_at": "2024-06-24T08:44:49Z",
+          "view_count": null,
+          "like_count": null,
+          "channel_id": null,
+          "channel_name": null,
+          "org_login": "ahmedtariq01"
+        },
+        {
+          "id": "youtube_0qotVMX-J5s",
+          "title": "Containerization Explained",
+          "provider": "YouTube",
+          "url": "https://www.youtube.com/watch?v=0qotVMX-J5s",
+          "description": "IBM containerization overview.",
+          "tags": ["containers"],
+          "relevance_score": 0.4044,
+          "stars": null,
+          "forks": null,
+          "published_at": "2019-03-18T18:39:24Z",
+          "view_count": 884664,
+          "like_count": 17875,
+          "channel_id": "UCKWaEZ-_VweaEx1j62do_vQ",
+          "channel_name": "IBM Technology",
+          "org_login": null
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "total_skills": 2,
+    "language": "en"
+  }
+}

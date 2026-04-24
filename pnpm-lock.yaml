@@ -129,6 +129,8 @@ importers:
 
   apps/recommendation: {}
 
+  packages/main-story: {}
+
   packages/theme: {}
 
 packages:
