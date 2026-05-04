@@ -613,9 +613,11 @@ export function LearningApp() {
                         )}
                       </div>
 
-                      {/* Description — 2 lines default, scrollable on hover */}
-                      <div className="overflow-hidden transition-all duration-300 max-h-8 group-hover:max-h-24 group-hover:overflow-y-auto">
-                        <p className="text-xs text-muted-foreground leading-relaxed">{course.description}</p>
+                      {/* Description — fixed to 2 lines for consistent card height */}
+                      <div className="h-8 overflow-hidden">
+                        <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
+                          {course.description}
+                        </p>
                       </div>
 
                       {/* Actions */}
