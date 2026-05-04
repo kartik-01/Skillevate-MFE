@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Target, Upload, Zap, CheckCircle2, AlertTriangle, Trash2, Loader2 } from "lucide-react";
+import { Target, Upload, Zap, CheckCircle2, AlertTriangle, Trash2, Loader2, ArrowRight } from "lucide-react";
 // Updated imports to use the new lightning-fast pipeline functions
 import { analyzeDirect, extractJdFile, extractJdText, parseResumeSkills, ResumeSkills, JdSkillsResponse } from "./services/analysisApi";
+import StarBorder from "./components/StarBorder";
 
 type ResumeVersion = {
   id: string;
@@ -58,11 +59,14 @@ export function AnalysisApp() {
   const [analysisByResumeId, setAnalysisByResumeId] = useState<Record<string, AnalysisResult>>({});
   
   const [resumeParseByResumeId, setResumeParseByResumeId] = useState<Record<string, ResumeParseState>>({});
+  /** In-memory PDF per resume version; parsing runs only on "Run AI Analysis", not on upload. */
+  const [resumePdfById, setResumePdfById] = useState<Record<string, File>>({});
   // NEW: Initialize JD extraction state
   const [jdExtractState, setJdExtractState] = useState<JdExtractState>({ status: "idle", skills: null, error: null });
   
   const [resumePendingDelete, setResumePendingDelete] = useState<ResumeVersion | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [hasPendingRunAction, setHasPendingRunAction] = useState(false);
 
   const resumeInputRef = useRef<HTMLInputElement | null>(null);
   const jobFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -75,6 +79,19 @@ export function AnalysisApp() {
   const selectedAnalysis = selectedResumeId ? analysisByResumeId[selectedResumeId] : undefined;
   const selectedResumeParseState = selectedResumeId ? resumeParseByResumeId[selectedResumeId] : undefined;
   const hasAnyAnalysis = Object.keys(analysisByResumeId).length > 0;
+
+  const jdExtractReady = jdExtractState.status === "ready" && Boolean(jdExtractState.skills);
+  const canUploadResume = jdExtractReady;
+  const resumePdfReady = Boolean(selectedResumeId && resumePdfById[selectedResumeId]);
+
+  const runAnalysisDisabledTitle =
+    isAnalyzing || (jdExtractReady && resumePdfReady)
+      ? undefined
+      : !jdExtractReady && !resumePdfReady
+        ? "Both an extracted job description and an uploaded resume PDF are required to run analysis."
+        : !jdExtractReady
+          ? "Job description must be extracted before running. Both job description and resume are required."
+          : "Upload a resume PDF. Both job description and resume are required.";
 
   // Persistence Effects
   useEffect(() => {
@@ -167,6 +184,12 @@ export function AnalysisApp() {
     const file = event.target.files?.[0] ?? null;
     if (!file) return;
 
+    if (!canUploadResume) {
+      setInputError("Add a job description first and wait for requirements to be extracted before uploading a resume.");
+      event.target.value = "";
+      return;
+    }
+
     if (!isAllowedFileExtension(file, ACCEPTED_RESUME_EXTENSIONS)) {
       setInputError("Resume must be a .pdf file.");
       event.target.value = "";
@@ -199,26 +222,12 @@ export function AnalysisApp() {
     });
     setResumeParseByResumeId((previous) => ({
       ...previous,
-      [resumeId]: { status: "parsing", skills: null, parsedAt: null, error: null },
+      [resumeId]: { status: "idle", skills: null, parsedAt: null, error: null },
     }));
+    setResumePdfById((previous) => ({ ...previous, [resumeId]: file }));
     setInputError("");
+    setHasPendingRunAction(true);
     event.target.value = "";
-
-    void parseResumeSkills(file)
-      .then((skills) => {
-        setResumeParseByResumeId((previous) => ({
-          ...previous,
-          [resumeId]: { status: "ready", skills, parsedAt: new Date().toISOString(), error: null },
-        }));
-      })
-      .catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : "Resume parsing failed.";
-        setResumeParseByResumeId((previous) => ({
-          ...previous,
-          [resumeId]: { status: "error", skills: null, parsedAt: null, error: message },
-        }));
-        setInputError(`Resume parsing failed: ${message}`);
-      });
   };
 
   const handleJobFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -239,6 +248,7 @@ export function AnalysisApp() {
     setJobFile(file);
     setInputError("");
     clearSelectedAnalysis();
+    setHasPendingRunAction(true);
     
     // NEW: Trigger Background JD Extraction for files
     setJdExtractState({ status: "extracting", skills: null, error: null });
@@ -253,24 +263,14 @@ export function AnalysisApp() {
       });
   };
 
-  // UPDATED: Require both background parsing tasks to be complete
-  const canRunAnalysis =
-    !isAnalyzing &&
-    Boolean(selectedResumeId) &&
-    selectedResumeParseState?.status === "ready" &&
-    jdExtractState.status === "ready";
+  const canRunAnalysis = !isAnalyzing && jdExtractReady && resumePdfReady;
 
   const handleRunAnalysis = async () => {
     if (isAnalyzing) return;
+    setHasPendingRunAction(false);
 
     if (!selectedResumeId) {
       setInputError("Please upload and select a resume before running analysis.");
-      return;
-    }
-
-    const parseState = selectedResumeId ? resumeParseByResumeId[selectedResumeId] : undefined;
-    if (!parseState || parseState.status !== "ready" || !parseState.skills) {
-      setInputError("Resume parsing is not ready yet. Please wait for background parsing to complete.");
       return;
     }
 
@@ -279,17 +279,47 @@ export function AnalysisApp() {
       return;
     }
 
+    const resumePdf = resumePdfById[selectedResumeId];
+    if (!resumePdf) {
+      setInputError("Please upload a resume PDF before running analysis.");
+      return;
+    }
+
     setInputError("");
     setIsAnalyzing(true);
+    const analysisStartTime = Date.now();
 
     try {
-      // 🔥 UPDATED: Call the lightning-fast direct endpoint with pre-fetched data
-      const apiResponse = await analyzeDirect(parseState.skills, jdExtractState.skills);
+      setResumeParseByResumeId((previous) => ({
+        ...previous,
+        [selectedResumeId]: { status: "parsing", skills: null, parsedAt: null, error: null },
+      }));
 
-      const matchedSkills = [
-        ...(apiResponse.gap_analysis?.matched_strong ?? []),
-        ...(apiResponse.gap_analysis?.matched_listed ?? []),
-      ];
+      let resumeSkills: ResumeSkills;
+      try {
+        resumeSkills = await parseResumeSkills(resumePdf);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "Resume parsing failed.";
+        setResumeParseByResumeId((previous) => ({
+          ...previous,
+          [selectedResumeId]: { status: "error", skills: null, parsedAt: null, error: message },
+        }));
+        setInputError(`Resume parsing failed: ${message}`);
+        return;
+      }
+
+      setResumeParseByResumeId((previous) => ({
+        ...previous,
+        [selectedResumeId]: {
+          status: "ready",
+          skills: resumeSkills,
+          parsedAt: new Date().toISOString(),
+          error: null,
+        },
+      }));
+
+      // 🔥 UPDATED: Call the lightning-fast direct endpoint with pre-fetched data
+      const apiResponse = await analyzeDirect(resumeSkills, jdExtractState.skills);
 
       const normalizeSkills = (skills: Array<{ skill: string }> | undefined) =>
         Array.from(new Set((skills ?? []).map((item) => item.skill).filter(Boolean))).slice(0, 25);
@@ -307,6 +337,12 @@ export function AnalysisApp() {
         preferredGaps,
         createdAt: new Date().toISOString(),
       };
+
+      const elapsed = Date.now() - analysisStartTime;
+      const minimumAnimationDuration = 2800;
+      if (elapsed < minimumAnimationDuration) {
+        await new Promise((resolve) => setTimeout(resolve, minimumAnimationDuration - elapsed));
+      }
 
       setAnalysisByResumeId((previous) => ({
         ...previous,
@@ -343,6 +379,11 @@ export function AnalysisApp() {
       delete next[resumeIdToDelete];
       return next;
     });
+    setResumePdfById((previous) => {
+      const next = { ...previous };
+      delete next[resumeIdToDelete];
+      return next;
+    });
 
     if (remainingResumes.length === 0) {
       setSelectedResumeId("");
@@ -354,35 +395,24 @@ export function AnalysisApp() {
     setSelectedResumeId(latestRemaining.id);
   };
 
+  const navigateToRecommendation = () => {
+    if (typeof window === "undefined") return;
+    window.location.hash = "#/recommendation";
+  };
+
   return (
     <div className="space-y-6 animate-slide-in-up">
       <div className="glass-card rounded-3xl p-6 border border-border/60">
-        <h2 className="text-lg font-semibold text-foreground mb-4">Get Started</h2>
+        <h2 className="text-lg font-semibold text-foreground mb-1">Get Started</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          Add the job description first (we extract requirements automatically). Then upload your resume and run analysis.
+        </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Resume Upload Block */}
-          <button
-            type="button"
-            className="border-2 border-dashed border-border rounded-2xl p-6 flex flex-col items-center justify-center text-center hover:border-primary/70 transition-colors cursor-pointer bg-secondary/30"
-            onClick={() => resumeInputRef.current?.click()}
-          >
-            <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm text-[#1DB896] mb-3">
-              <Upload size={20} />
-            </div>
-            <p className="text-sm font-semibold text-foreground">Upload Resume</p>
-            <p className="text-xs text-muted-foreground mt-1">PDF (Max 5MB)</p>
-            <p className="text-xs text-muted-foreground mt-3 truncate max-w-full">
-              {selectedResume
-                ? `Selected: ${selectedResume.label} (${selectedResume.originalFileName})`
-                : resumeFile
-                ? `Selected: ${resumeFile.name}`
-                : "No file selected"}
-            </p>
-          </button>
-
-          {/* JD Input Block */}
+          {/* Step 1: JD first */}
           <div className="border-2 border-dashed border-border rounded-2xl p-6 hover:border-primary/70 transition-colors bg-secondary/30">
             <div className="flex items-center gap-2 mb-3 text-foreground">
+              <span className="text-xs font-bold text-primary bg-primary/15 px-2 py-0.5 rounded-md">1</span>
               <Target size={18} className="text-[#1DB896]" />
               <p className="text-sm font-semibold">Job Description</p>
             </div>
@@ -392,6 +422,7 @@ export function AnalysisApp() {
               onChange={(event) => {
                 setJobDescription(event.target.value);
                 clearSelectedAnalysis();
+                setHasPendingRunAction(true);
               }}
               placeholder="Paste job description text here"
               rows={5}
@@ -414,6 +445,38 @@ export function AnalysisApp() {
               {jobFile ? `Selected: ${jobFile.name}` : "Accepted: .txt, .pdf, .doc, .docx"}
             </p>
           </div>
+
+          {/* Step 2: Resume after JD is extracted */}
+          <button
+            type="button"
+            disabled={!canUploadResume}
+            onClick={() => resumeInputRef.current?.click()}
+            className={`border-2 border-dashed border-border rounded-2xl p-6 flex flex-col items-center justify-center text-center transition-colors bg-secondary/30 ${
+              canUploadResume
+                ? "hover:border-primary/70 cursor-pointer"
+                : "opacity-50 cursor-not-allowed"
+            }`}
+            title={canUploadResume ? undefined : "Add a job description and wait for extraction before uploading a resume"}
+          >
+            <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm text-[#1DB896] mb-3">
+              <Upload size={20} />
+            </div>
+            <div className="flex items-center justify-center gap-2 mb-1">
+              <span className="text-xs font-bold text-primary bg-primary/15 px-2 py-0.5 rounded-md">2</span>
+              <p className="text-sm font-semibold text-foreground">Upload Resume</p>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">PDF (Max 5MB)</p>
+            {!canUploadResume ? (
+              <p className="text-xs text-muted-foreground mt-2 max-w-full">Available after job requirements are extracted.</p>
+            ) : null}
+            <p className="text-xs text-muted-foreground mt-3 truncate max-w-full">
+              {selectedResume
+                ? `Selected: ${selectedResume.label} (${selectedResume.originalFileName})`
+                : resumeFile
+                ? `Selected: ${resumeFile.name}`
+                : "No file selected"}
+            </p>
+          </button>
         </div>
 
         <input
@@ -437,51 +500,75 @@ export function AnalysisApp() {
         
         {/* Background Task Indicators */}
         <div className="mt-3 space-y-1">
-          {selectedResumeParseState?.status === "parsing" ? (
-            <p className="text-sm text-muted-foreground flex items-center gap-2">
-              <Loader2 size={14} className="animate-spin" /> Parsing {selectedResume?.label ?? "resume"} in background...
-            </p>
-          ) : null}
           {selectedResumeParseState?.status === "error" ? (
             <p className="text-sm text-destructive flex items-center gap-2">
               <AlertTriangle size={14} /> Resume parsing failed. Please upload again.
             </p>
           ) : null}
-          {selectedResumeParseState?.status === "ready" ? (
-            <p className="text-sm text-emerald-500 flex items-center gap-2">
-              <CheckCircle2 size={14} /> Resume parsed and ready.
-            </p>
-          ) : null}
 
           {/* JD Extraction Status Indicators */}
-          {jdExtractState.status === "extracting" ? (
-            <p className="text-sm text-muted-foreground flex items-center gap-2">
-              <Loader2 size={14} className="animate-spin" /> Extracting job requirements in background...
-            </p>
-          ) : null}
           {jdExtractState.status === "error" ? (
             <p className="text-sm text-destructive flex items-center gap-2">
               <AlertTriangle size={14} /> {jdExtractState.error ?? "JD extraction failed."}
             </p>
           ) : null}
-          {jdExtractState.status === "ready" ? (
-            <p className="text-sm text-emerald-500 flex items-center gap-2">
-              <CheckCircle2 size={14} /> Job requirements extracted and ready.
-            </p>
-          ) : null}
         </div>
 
-        <div className="mt-6 flex justify-center">
-          <button
-            type="button"
-            disabled={!canRunAnalysis}
-            onClick={handleRunAnalysis}
-            className="gradient-primary hover:opacity-90 text-white py-3 px-6 rounded-xl font-semibold text-sm transition-all shadow-sm hover:shadow-lg hover:shadow-cyan-500/30 inline-flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isAnalyzing ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
-            {isAnalyzing ? "Running Analysis..." : "Run AI Analysis"}
-          </button>
+        <div
+          className="mt-6 flex justify-center"
+          title={!canRunAnalysis && !isAnalyzing ? runAnalysisDisabledTitle : undefined}
+        >
+          {hasPendingRunAction ? (
+            <StarBorder
+              as="button"
+              type="button"
+              disabled={!canRunAnalysis}
+              aria-label={
+                isAnalyzing
+                  ? "Running analysis"
+                  : !canRunAnalysis
+                    ? (runAnalysisDisabledTitle ?? "Run AI Analysis")
+                    : "Run AI Analysis"
+              }
+              onClick={handleRunAnalysis}
+              className="star-border-run cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+              color="cyan"
+              speed="3.5s"
+            >
+              {isAnalyzing ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
+              {isAnalyzing ? "Running Analysis..." : "Run AI Analysis"}
+            </StarBorder>
+          ) : (
+            <button
+              type="button"
+              disabled={!canRunAnalysis}
+              aria-label={
+                isAnalyzing
+                  ? "Running analysis"
+                  : !canRunAnalysis
+                    ? (runAnalysisDisabledTitle ?? "Run AI Analysis")
+                    : "Run AI Analysis"
+              }
+              onClick={handleRunAnalysis}
+              className="gradient-primary hover:opacity-90 text-white py-3 px-6 rounded-xl font-semibold text-sm transition-all shadow-sm hover:shadow-lg hover:shadow-cyan-500/30 inline-flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isAnalyzing ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
+              {isAnalyzing ? "Running Analysis..." : "Run AI Analysis"}
+            </button>
+          )}
         </div>
+        {isAnalyzing ? (
+          <div className="mt-3 mx-auto w-full max-w-md">
+            <div className="h-1.5 w-full rounded-full bg-border/60 overflow-hidden">
+              <motion.div
+                className="h-full rounded-full bg-cyan-400"
+                initial={{ width: "0%" }}
+                animate={{ width: "100%" }}
+                transition={{ duration: 2.8, ease: "linear" }}
+              />
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {hasAnyAnalysis || isAnalyzing ? (
@@ -540,10 +627,22 @@ export function AnalysisApp() {
           ) : selectedAnalysis ? (
             <div className="space-y-8">
               <div>
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4 flex items-center gap-2">
-                  <CheckCircle2 size={16} className="text-[#1DB896]" />
-                  Verified Skills (Segmented)
-                </h3>
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                    <CheckCircle2 size={16} className="text-[#1DB896]" />
+                    Verified Skills (Segmented)
+                  </h3>
+                  <StarBorder
+                    as="button"
+                    onClick={navigateToRecommendation}
+                    className="star-border-cta cursor-pointer whitespace-nowrap"
+                    color="cyan"
+                    speed="3.5s"
+                  >
+                    Learn & Earn XP
+                    <ArrowRight size={14} />
+                  </StarBorder>
+                </div>
                 <div className="flex flex-wrap gap-2">
                   {selectedAnalysis.verifiedStrongSkills.length > 0 ? (
                     selectedAnalysis.verifiedStrongSkills.map((skill) => (
@@ -575,10 +674,22 @@ export function AnalysisApp() {
               <div className="h-px bg-border w-full" />
 
               <div>
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4 flex items-center gap-2">
-                  <AlertTriangle size={16} className="text-amber-500" />
-                  Skill Gaps (Segmented)
-                </h3>
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                    <AlertTriangle size={16} className="text-amber-500" />
+                    Skill Gaps (Segmented)
+                  </h3>
+                  <StarBorder
+                    as="button"
+                    onClick={navigateToRecommendation}
+                    className="star-border-cta cursor-pointer whitespace-nowrap"
+                    color="cyan"
+                    speed="3.5s"
+                  >
+                    Learn & Earn XP
+                    <ArrowRight size={14} />
+                  </StarBorder>
+                </div>
                 <div className="space-y-4">
                   {selectedAnalysis.criticalGaps.length > 0 ? (
                     selectedAnalysis.criticalGaps.map((skill) => (
@@ -643,7 +754,7 @@ export function AnalysisApp() {
       <AnimatePresence>
         {resumePendingDelete ? (
           <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -652,7 +763,7 @@ export function AnalysisApp() {
               role="dialog"
               aria-modal="true"
               aria-labelledby="delete-resume-title"
-              className="w-full max-w-md rounded-2xl bg-card text-card-foreground p-6 shadow-2xl border border-border"
+              className="w-full max-w-md rounded-2xl bg-slate-950 text-card-foreground p-6 shadow-2xl border border-cyan-900/40 opacity-100"
               initial={{ opacity: 0, y: 12, scale: 0.96 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 8, scale: 0.97 }}
