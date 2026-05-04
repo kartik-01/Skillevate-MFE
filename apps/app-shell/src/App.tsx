@@ -8,6 +8,8 @@ import Footer from "./landing/components/Footer";
 import Header from "./landing/components/Header";
 import { ThemeProvider } from "./landing/components/ThemeProvider";
 
+const USER_SERVICE_URL = "http://localhost:8001";
+
 if (module && (module as any).hot) {
   (module as any).hot.addStatusHandler((status: string) => {
     if (status === "abort" || status === "fail") {
@@ -53,7 +55,46 @@ export default function App() {
   const [Recommendation, setRecommendation] = useState<RemoteModule>(null);
   const [Gamify, setGamify] = useState<RemoteModule>(null);
   const [Analysis, setAnalysis] = useState<RemoteModule>(null);
+  const [syncedUserSub, setSyncedUserSub] = useState<string | null>(null);
   const firstName = user?.name?.split(" ")[0] || "Learner";
+
+  useEffect(() => {
+    if (!isAuthenticated || !user?.sub) return;
+    if (syncedUserSub === user.sub) return;
+
+    const syncUser = async () => {
+      const payload = {
+        auth0_sub: user.sub,
+        email: user.email,
+        name: user.name,
+        picture: user.picture,
+        given_name: user.given_name,
+        family_name: user.family_name,
+        username:
+          typeof user.nickname === "string"
+            ? user.nickname
+            : user.email?.split("@")[0],
+        target_role: "",
+        preferences: [],
+        onboarding_completed: false,
+      };
+
+      try {
+        await fetch(`${USER_SERVICE_URL}/api/users`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+        setSyncedUserSub(user.sub);
+      } catch (error) {
+        console.error("Failed to sync Auth0 user with User Service:", error);
+      }
+    };
+
+    syncUser();
+  }, [isAuthenticated, user, syncedUserSub]);
 
   // Validate hash on every render
   useEffect(() => {
