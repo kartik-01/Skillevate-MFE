@@ -12,7 +12,9 @@
     "baseUrl": ".",
     "paths": {
       "@skillevate/theme": ["packages/theme/src"],
-      "@skillevate/theme/*": ["packages/theme/src/*"]
+      "@skillevate/theme/*": ["packages/theme/src/*"],
+      "@skillevate/main-story": ["packages/main-story/src"],
+      "@skillevate/main-story/*": ["packages/main-story/src/*"]
     }
   }
 }

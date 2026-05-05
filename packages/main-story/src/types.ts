@@ -1,0 +1,55 @@
+export type StoryGap = {
+  name: string;
+  priority: "High" | "Medium";
+  match: string;
+};
+
+export type StoryCourse = {
+  /** Stable id from recommendation source (e.g. `youtube_CjUw68k7Peg`). */
+  id: string;
+  title: string;
+  fillsGap: string;
+  xp: number;
+  provider?: string;
+  url?: string;
+  /** One-line context, e.g. `Video · Mar 2026` or `Self-paced`. */
+  resourceLabel?: string;
+};
+
+export type StoryNode =
+  | {
+      kind: "prologue";
+      id: "prologue";
+      title: string;
+      body: string;
+      status: "complete" | "pending";
+    }
+  | {
+      kind: "course";
+      id: string;
+      courseId: string;
+      title: string;
+      fillsGap: string;
+      xp: number;
+      provider?: string;
+      url?: string;
+      resourceLabel?: string;
+      status: "locked" | "current" | "complete";
+    }
+  | {
+      kind: "epilogue";
+      id: "epilogue";
+      title: string;
+      body: string;
+      status: "locked" | "current" | "complete";
+    };
+
+export type MainStoryMeta = {
+  resumeId: string;
+  resumeLabel: string;
+  matchPercent: number;
+  taleId: string;
+  totalCourseSteps: number;
+  completedCourseSteps: number;
+  currentCourseTitle: string | null;
+};
