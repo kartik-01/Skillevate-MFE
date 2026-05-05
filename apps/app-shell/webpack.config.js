@@ -1,21 +1,18 @@
 const createWebpackConfig = require("../../configs/createWebpackConfig");
+const { getEnv } = require("../../configs/env");
 
-const isProd = process.env.NODE_ENV === "production";
+// Module Federation remote dev-server URLs are required at build time.
+// They live in Skillevate-MFE/.env so we never hard-code localhost here.
+const remotes = {
+  recommendation: `recommendation@${getEnv("REMOTE_RECOMMENDATION_URL", { required: true })}/remoteEntry.js`,
+  gamify: `gamify@${getEnv("REMOTE_GAMIFY_URL", { required: true })}/remoteEntry.js`,
+  analysis: `analysis@${getEnv("REMOTE_ANALYSIS_URL", { required: true })}/remoteEntry.js`,
+};
 
 module.exports = createWebpackConfig({
   appName: "app-shell",
   port: Number(process.env.PORT || 3000),
   federationName: "app_shell",
-  remotes: isProd
-    ? {
-        recommendation: "recommendation@http://localhost:3001/remoteEntry.js",
-        gamify: "gamify@http://localhost:3002/remoteEntry.js",
-        analysis: "analysis@http://localhost:3003/remoteEntry.js",
-      }
-    : {
-        recommendation: "recommendation@http://localhost:3001/remoteEntry.js",
-        gamify: "gamify@http://localhost:3002/remoteEntry.js",
-        analysis: "analysis@http://localhost:3003/remoteEntry.js",
-      },
+  remotes,
   useEnhancedRuntime: true,
 });

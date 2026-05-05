@@ -7,6 +7,8 @@ import LandingHome from "./landing/LandingHome";
 import Footer from "./landing/components/Footer";
 import Header from "./landing/components/Header";
 import { ThemeProvider } from "./landing/components/ThemeProvider";
+import { UserProvider } from "./user/UserProvider";
+import { SyncedThemeBridge } from "./user/SyncedThemeBridge";
 
 declare global {
   interface Window {
@@ -26,7 +28,8 @@ if (module && (module as any).hot) {
 
 type RemoteModule = React.ComponentType | null;
 
-const avatarImg =
+// Fallback avatar used only when Auth0 doesn't provide a `picture` claim.
+const FALLBACK_AVATAR =
   "https://images.unsplash.com/photo-1701463387028-3947648f1337?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBwb3J0cmFpdCUyMHVzZXIlMjBwcm9maWxlfGVufDF8fHx8MTc3Mzc5NDA2Nnww&ixlib=rb-4.1.0&q=80&w=1080";
 
 export default function App() {
@@ -61,6 +64,8 @@ export default function App() {
   const [Gamify, setGamify] = useState<RemoteModule>(null);
   const [Analysis, setAnalysis] = useState<RemoteModule>(null);
   const firstName = user?.name?.split(" ")[0] || "Learner";
+  const avatarSrc =
+    typeof user?.picture === "string" && user.picture.length > 0 ? user.picture : FALLBACK_AVATAR;
 
   // Validate hash on every render
   useEffect(() => {
@@ -198,8 +203,10 @@ export default function App() {
   }
 
   return (
-    <ThemeProvider defaultTheme="dark">
-      <div className="min-h-screen flex flex-col bg-background text-foreground transition-colors duration-300">
+    <UserProvider>
+      <ThemeProvider defaultTheme="dark">
+        <SyncedThemeBridge />
+        <div className="min-h-screen flex flex-col bg-background text-foreground transition-colors duration-300">
         <Header
           onLogoClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
           hideNavigation
@@ -220,8 +227,13 @@ export default function App() {
                   <div className="relative">
                     <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-[#1DB896] p-[2px]">
                       <img
-                        src={avatarImg}
+                        src={avatarSrc}
                         alt="User Profile"
+                        referrerPolicy="no-referrer"
+                        onError={(event) => {
+                          const target = event.currentTarget;
+                          if (target.src !== FALLBACK_AVATAR) target.src = FALLBACK_AVATAR;
+                        }}
                         className="w-full h-full rounded-full object-cover"
                       />
                     </div>
@@ -314,7 +326,8 @@ export default function App() {
         </main>
 
         <Footer />
-      </div>
-    </ThemeProvider>
+        </div>
+      </ThemeProvider>
+    </UserProvider>
   );
 }

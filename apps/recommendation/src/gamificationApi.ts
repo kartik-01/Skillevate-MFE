@@ -43,8 +43,10 @@ export type SyncAnalysisPayload = {
   recommendationRequest?: RecommendationRequestBody | null;
 };
 
-const GAMIFICATION_API_BASE_URL =
-  process.env.SKILLEVATE_GAMIFICATION_URL || "http://localhost:8002";
+// Injected by webpack `DefinePlugin` from `Skillevate-MFE/.env`. Empty when
+// missing so the resulting fetch surfaces a clear "URL is empty" error
+// instead of silently hitting a wrong host.
+const GAMIFICATION_API_BASE_URL = process.env.SKILLEVATE_GAMIFICATION_URL || "";
 
 async function parseResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {

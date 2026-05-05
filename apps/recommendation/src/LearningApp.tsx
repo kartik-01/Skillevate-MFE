@@ -85,8 +85,10 @@ type SkillRequest = {
 
 const ANALYSIS_STATE_STORAGE_KEY = "skillevate-analysis-state-v1";
 const RECOMMENDATION_REQUEST_STORAGE_KEY = "skillevate-recommendation-request-v1";
-const RECOMMENDATION_API_URL =
-  process.env.SKILLEVATE_RECOMMENDATION_URL || "http://localhost:8001/api/batch-recommendations";
+// Injected by webpack `DefinePlugin` from `Skillevate-MFE/.env`. We don't
+// fall back to a localhost URL so misconfigurations fail loudly at the
+// network layer instead of pointing at a wrong service.
+const RECOMMENDATION_API_URL = process.env.SKILLEVATE_RECOMMENDATION_URL || "";
 const AUTH0_AUDIENCE = process.env.AUTH0_AUDIENCE || "";
 
 const reactImg =

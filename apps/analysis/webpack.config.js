@@ -1,5 +1,6 @@
 const path = require("path");
 const createWebpackConfig = require("../../configs/createWebpackConfig");
+const { getEnv } = require("../../configs/env");
 
 module.exports = createWebpackConfig({
   appName: "analysis",
@@ -8,5 +9,5 @@ module.exports = createWebpackConfig({
   exposes: {
     "./Widget": path.resolve(__dirname, "src/Widget"),
   },
-  notifyHostReloadUrl: "http://localhost:3000/__trigger_reload__",
+  notifyHostReloadUrl: getEnv("HOST_RELOAD_URL"),
 });
