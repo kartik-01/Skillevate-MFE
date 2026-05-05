@@ -64,6 +64,11 @@ const API_ROUTES = {
   analyzePdf: "/api/v1/analyzer/analyze/pdf",      // Legacy full pipeline
 };
 
+/** Default when env is unset: local FastAPI on port 8000 (avoids relative URLs hitting the webpack dev server → 404). */
+const DEFAULT_ANALYSIS_API_BASE_URL = "";
+
+const normalizeBaseUrl = (url: string) => url.trim().replace(/\/+$/, "");
+
 /**
  * Resolves the analysis service base URL.
  *
@@ -72,24 +77,25 @@ const API_ROUTES = {
  *      (e.g. set from the host shell for E2E tests).
  *   2. `process.env.ANALYSIS_API_BASE_URL` — injected at build time from
  *      `Skillevate-MFE/.env` via webpack `DefinePlugin`.
- *
- * Returns an empty string when nothing is configured. Callers below let the
- * resulting fetch fail with a clear error rather than silently aiming at a
- * hard-coded localhost host.
+ *   3. `DEFAULT_ANALYSIS_API_BASE_URL` — local dev fallback (port 8000).
  */
 const getRuntimeBaseUrl = (): string => {
   if (typeof window !== "undefined") {
     const runtime = (window as WindowWithSkillevateConfig).__SKILLEVATE_ANALYSIS_CONFIG__;
-    if (runtime?.apiBaseUrl) {
-      return runtime.apiBaseUrl;
+    if (runtime?.apiBaseUrl?.trim()) {
+      return normalizeBaseUrl(runtime.apiBaseUrl);
     }
   }
 
-  if (typeof process !== "undefined" && process.env?.ANALYSIS_API_BASE_URL) {
-    return process.env.ANALYSIS_API_BASE_URL;
+  const fromEnv =
+    typeof process !== "undefined" && typeof process.env?.ANALYSIS_API_BASE_URL === "string"
+      ? process.env.ANALYSIS_API_BASE_URL.trim()
+      : "";
+  if (fromEnv) {
+    return normalizeBaseUrl(fromEnv);
   }
 
-  return "";
+  return normalizeBaseUrl(DEFAULT_ANALYSIS_API_BASE_URL);
 };
 
 const getAccessToken = async (): Promise<string | null> => {
