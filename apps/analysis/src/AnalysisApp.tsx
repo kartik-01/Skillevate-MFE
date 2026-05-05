@@ -3,6 +3,11 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Target, Upload, Zap, CheckCircle2, AlertTriangle, Trash2, Loader2, ArrowRight } from "lucide-react";
 // Updated imports to use the new lightning-fast pipeline functions
 import { analyzeDirect, extractJdFile, extractJdText, parseResumeSkills, ResumeSkills, JdSkillsResponse } from "./services/analysisApi";
+import {
+  buildRecommendationRequestFromAnalysis,
+  removeRecommendationRequestForResume,
+  saveRecommendationRequestForResume,
+} from "./services/recommendationPayload";
 import StarBorder from "./components/StarBorder";
 
 type ResumeVersion = {
@@ -19,6 +24,9 @@ type AnalysisResult = {
   verifiedListedSkills: string[];
   criticalGaps: string[];
   preferredGaps: string[];
+  // Backward-compat fields consumed by recommendation module.
+  verifiedSkills: string[];
+  gaps: Array<{ name: string; priority: "High" | "Medium"; match: string }>;
   createdAt: string;
 };
 
@@ -45,6 +53,48 @@ type PersistedAnalysisState = {
 };
 
 const ANALYSIS_STATE_STORAGE_KEY = "skillevate-analysis-state-v1";
+
+const normalizePersistedAnalysisEntry = (raw: unknown): AnalysisResult => {
+  const entry = (raw ?? {}) as Partial<AnalysisResult> & {
+    verifiedSkills?: string[];
+    gaps?: Array<{ name?: string; priority?: "High" | "Medium"; match?: string }>;
+  };
+
+  const verifiedStrongSkills = Array.isArray(entry.verifiedStrongSkills) ? entry.verifiedStrongSkills : [];
+  const verifiedListedSkills = Array.isArray(entry.verifiedListedSkills) ? entry.verifiedListedSkills : [];
+  const criticalGaps = Array.isArray(entry.criticalGaps) ? entry.criticalGaps : [];
+  const preferredGaps = Array.isArray(entry.preferredGaps) ? entry.preferredGaps : [];
+
+  const verifiedSkills =
+    Array.isArray(entry.verifiedSkills) && entry.verifiedSkills.length > 0
+      ? entry.verifiedSkills
+      : [...verifiedStrongSkills, ...verifiedListedSkills.map((s) => `${s} (Listed)`)];
+
+  const gaps =
+    Array.isArray(entry.gaps) && entry.gaps.length > 0
+      ? entry.gaps
+          .map((gap) => ({
+            name: String(gap?.name ?? "").trim(),
+            priority: (gap?.priority === "High" ? "High" : "Medium") as "High" | "Medium",
+            match: String(gap?.match ?? ""),
+          }))
+          .filter((gap) => gap.name.length > 0)
+      : [
+          ...criticalGaps.map((name) => ({ name, priority: "High" as const, match: "" })),
+          ...preferredGaps.map((name) => ({ name, priority: "Medium" as const, match: "" })),
+        ];
+
+  return {
+    matchPercent: typeof entry.matchPercent === "number" ? entry.matchPercent : 0,
+    verifiedStrongSkills,
+    verifiedListedSkills,
+    criticalGaps,
+    preferredGaps,
+    verifiedSkills,
+    gaps,
+    createdAt: typeof entry.createdAt === "string" ? entry.createdAt : new Date().toISOString(),
+  };
+};
 
 export function AnalysisApp() {
   const currentUserName = "UserName";
@@ -109,7 +159,12 @@ export function AnalysisApp() {
 
       setResumeVersions(restoredResumes);
       setSelectedResumeId(restoredSelectedId);
-      setAnalysisByResumeId(parsed.analysisByResumeId ?? {});
+      const restoredAnalysis = parsed.analysisByResumeId ?? {};
+      setAnalysisByResumeId(
+        Object.fromEntries(
+          Object.entries(restoredAnalysis).map(([resumeId, raw]) => [resumeId, normalizePersistedAnalysisEntry(raw)]),
+        ) as Record<string, AnalysisResult>,
+      );
       setResumeParseByResumeId(parsed.resumeParseByResumeId ?? {});
       setJobDescription(parsed.jobDescription ?? "");
     } catch {
@@ -172,6 +227,7 @@ export function AnalysisApp() {
 
   const clearSelectedAnalysis = () => {
     if (!selectedResumeId) return;
+    removeRecommendationRequestForResume(selectedResumeId);
     setAnalysisByResumeId((previous) => {
       if (!previous[selectedResumeId]) return previous;
       const next = { ...previous };
@@ -335,6 +391,11 @@ export function AnalysisApp() {
         verifiedListedSkills,
         criticalGaps,
         preferredGaps,
+        verifiedSkills: [...verifiedStrongSkills, ...verifiedListedSkills.map((s) => `${s} (Listed)`)],
+        gaps: [
+          ...criticalGaps.map((name) => ({ name, priority: "High" as const, match: "" })),
+          ...preferredGaps.map((name) => ({ name, priority: "Medium" as const, match: "" })),
+        ],
         createdAt: new Date().toISOString(),
       };
 
@@ -348,6 +409,15 @@ export function AnalysisApp() {
         ...previous,
         [selectedResumeId]: generatedResult,
       }));
+
+      const recommendationBody = buildRecommendationRequestFromAnalysis({
+        analysis: generatedResult,
+        jdSkills: jdExtractState.skills,
+        jobDescription,
+        maxResults: 10,
+        language: "en",
+      });
+      saveRecommendationRequestForResume(selectedResumeId, recommendationBody);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Analysis failed.";
       setInputError(`AI analysis failed: ${message}`);
@@ -374,6 +444,7 @@ export function AnalysisApp() {
       delete next[resumeIdToDelete];
       return next;
     });
+    removeRecommendationRequestForResume(resumeIdToDelete);
     setResumeParseByResumeId((previous) => {
       const next = { ...previous };
       delete next[resumeIdToDelete];
