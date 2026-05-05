@@ -1,7 +1,8 @@
 const path = require("path");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
-const { container } = require("webpack");
+const webpack = require("webpack");
+const { container } = webpack;
 const { ModuleFederationPlugin } = container;
 const {
   ModuleFederationPlugin: EnhancedModuleFederationPlugin,
@@ -71,6 +72,18 @@ function createWebpackConfig(options) {
       }),
       new MiniCssExtractPlugin({
         filename: isProd ? "[name].[contenthash].css" : "[name].css",
+      }),
+      new webpack.DefinePlugin({
+        "process.env.ANALYSIS_API_BASE_URL": JSON.stringify(
+          process.env.ANALYSIS_API_BASE_URL || "http://0.0.0.0:8000"
+        ),
+        "process.env.SKILLEVATE_GAMIFICATION_URL": JSON.stringify(
+          process.env.SKILLEVATE_GAMIFICATION_URL || "http://localhost:8002"
+        ),
+        "process.env.SKILLEVATE_RECOMMENDATION_URL": JSON.stringify(
+          process.env.SKILLEVATE_RECOMMENDATION_URL || "http://localhost:8001/api/batch-recommendations"
+        ),
+        "process.env.AUTH0_AUDIENCE": JSON.stringify(process.env.AUTH0_AUDIENCE || ""),
       }),
       useEnhancedRuntime
         ? new EnhancedModuleFederationPlugin({
