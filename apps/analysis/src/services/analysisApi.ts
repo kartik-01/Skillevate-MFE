@@ -65,7 +65,7 @@ const API_ROUTES = {
 };
 
 /** Default when env is unset: local FastAPI on port 8000 (avoids relative URLs hitting the webpack dev server → 404). */
-const DEFAULT_ANALYSIS_API_BASE_URL = "http://localhost:8000";
+const DEFAULT_ANALYSIS_API_BASE_URL = "";
 
 const normalizeBaseUrl = (url: string) => url.trim().replace(/\/+$/, "");
 
