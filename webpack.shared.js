@@ -50,6 +50,7 @@ const createSharedConfig = () => {
 
 const resolveWorkspaceAliases = {
   "@skillevate/theme": path.resolve(__dirname, "packages/theme/src"),
+  "@skillevate/main-story": path.resolve(__dirname, "packages/main-story/src"),
 };
 
 module.exports = {
