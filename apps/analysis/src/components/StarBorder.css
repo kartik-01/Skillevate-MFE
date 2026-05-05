@@ -31,9 +31,9 @@
 
 .inner-content {
   position: relative;
-  border: 1px solid #222;
-  background: #000;
-  color: white;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
   font-size: 16px;
   text-align: center;
   padding: 16px 26px;
@@ -44,7 +44,11 @@
 
 /* Optional: smaller variant used for section CTAs */
 .star-border-cta .inner-content {
+  border: 1px solid hsl(var(--primary) / 0.35);
+  background: hsl(var(--primary) / 0.12);
+  color: hsl(var(--foreground));
   font-size: 12px;
+  font-weight: 600;
   padding: 8px 12px;
   border-radius: 12px;
   display: inline-flex;
@@ -57,6 +61,10 @@
 .star-border-cta {
   border-radius: 12px;
   min-width: 170px;
+}
+
+.star-border-cta:hover .inner-content {
+  background: hsl(var(--primary) / 0.18);
 }
 
 .star-border-run .inner-content {
