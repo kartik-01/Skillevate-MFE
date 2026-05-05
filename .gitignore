@@ -35,7 +35,7 @@ pnpm-debug.log*
 .env.*
 !.env.example
 !.env.*.example
-
+.env.example
 # ------------------------------
 # Caches / tooling
 # ------------------------------

@@ -94,6 +94,8 @@ const getRuntimeBaseUrl = (): string => {
     const runtime = (window as WindowWithSkillevateConfig).__SKILLEVATE_ANALYSIS_CONFIG__;
     if (runtime?.apiBaseUrl?.trim()) {
       return normalizeBaseUrl(runtime.apiBaseUrl);
+    if (runtime?.apiBaseUrl?.trim()) {
+      return normalizeBaseUrl(runtime.apiBaseUrl);
     }
   }
 
