@@ -51,7 +51,6 @@ type WindowWithSkillevateConfig = Window & {
   __SKILLEVATE_GET_ACCESS_TOKEN__?: () => Promise<string>;
 };
 
-const DEFAULT_API_BASE_URL = "http://0.0.0.0:8000";
 const DEFAULT_INFERENCE = "rag";
 
 // Added new extraction and direct analysis routes
@@ -65,7 +64,20 @@ const API_ROUTES = {
   analyzePdf: "/api/v1/analyzer/analyze/pdf",      // Legacy full pipeline
 };
 
-const getRuntimeBaseUrl = () => {
+/**
+ * Resolves the analysis service base URL.
+ *
+ * Priority:
+ *   1. `window.__SKILLEVATE_ANALYSIS_CONFIG__.apiBaseUrl` — runtime override
+ *      (e.g. set from the host shell for E2E tests).
+ *   2. `process.env.ANALYSIS_API_BASE_URL` — injected at build time from
+ *      `Skillevate-MFE/.env` via webpack `DefinePlugin`.
+ *
+ * Returns an empty string when nothing is configured. Callers below let the
+ * resulting fetch fail with a clear error rather than silently aiming at a
+ * hard-coded localhost host.
+ */
+const getRuntimeBaseUrl = (): string => {
   if (typeof window !== "undefined") {
     const runtime = (window as WindowWithSkillevateConfig).__SKILLEVATE_ANALYSIS_CONFIG__;
     if (runtime?.apiBaseUrl) {
@@ -77,7 +89,7 @@ const getRuntimeBaseUrl = () => {
     return process.env.ANALYSIS_API_BASE_URL;
   }
 
-  return DEFAULT_API_BASE_URL;
+  return "";
 };
 
 const getAccessToken = async (): Promise<string | null> => {

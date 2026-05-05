@@ -10,6 +10,18 @@ const {
 } = require("@module-federation/enhanced");
 
 const { createSharedConfig, resolveWorkspaceAliases } = require("../webpack.shared");
+const { getEnvDefinitions } = require("./env");
+
+// Every env var that should be readable from the React bundle as `process.env.X`.
+// Values come from `Skillevate-MFE/.env` (or the shell) — see `configs/env.js`.
+// Add new keys here when the runtime needs them; do not embed default URLs.
+const RUNTIME_ENV_KEYS = [
+  "ANALYSIS_API_BASE_URL",
+  "SKILLEVATE_GAMIFICATION_URL",
+  "SKILLEVATE_RECOMMENDATION_URL",
+  "USER_SERVICE_URL",
+  "AUTH0_AUDIENCE",
+];
 
 function createWebpackConfig(options) {
   const {
@@ -73,18 +85,7 @@ function createWebpackConfig(options) {
       new MiniCssExtractPlugin({
         filename: isProd ? "[name].[contenthash].css" : "[name].css",
       }),
-      new webpack.DefinePlugin({
-        "process.env.ANALYSIS_API_BASE_URL": JSON.stringify(
-          process.env.ANALYSIS_API_BASE_URL || "http://0.0.0.0:8000"
-        ),
-        "process.env.SKILLEVATE_GAMIFICATION_URL": JSON.stringify(
-          process.env.SKILLEVATE_GAMIFICATION_URL || "http://localhost:8002"
-        ),
-        "process.env.SKILLEVATE_RECOMMENDATION_URL": JSON.stringify(
-          process.env.SKILLEVATE_RECOMMENDATION_URL || "http://localhost:8001/api/batch-recommendations"
-        ),
-        "process.env.AUTH0_AUDIENCE": JSON.stringify(process.env.AUTH0_AUDIENCE || ""),
-      }),
+      new webpack.DefinePlugin(getEnvDefinitions(RUNTIME_ENV_KEYS)),
       useEnhancedRuntime
         ? new EnhancedModuleFederationPlugin({
             name: federationName,
