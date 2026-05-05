@@ -14,14 +14,31 @@ const defaultSingletons = [
   "tailwind-merge",
 ];
 
+function resolveInstalledVersion(name) {
+  try {
+    const pkgJsonPath = require.resolve(`${name}/package.json`, {
+      paths: [__dirname],
+    });
+    return require(pkgJsonPath).version;
+  } catch (_error) {
+    return undefined;
+  }
+}
+
 const createSharedConfig = () => {
   const shared = {};
 
   const addShared = (name) => {
-    if (!pkg.dependencies?.[name]) return;
+    const declaredVersion = pkg.dependencies?.[name];
+    if (!declaredVersion) return;
+    const installedVersion = resolveInstalledVersion(name);
+
     shared[name] = {
       singleton: true,
-      requiredVersion: pkg.dependencies[name],
+      requiredVersion: ["react", "react-dom"].includes(name)
+        ? false
+        : declaredVersion,
+      ...(installedVersion ? { version: installedVersion } : {}),
       eager: ["react", "react-dom"].includes(name),
     };
   };

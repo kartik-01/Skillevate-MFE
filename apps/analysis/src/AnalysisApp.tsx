@@ -417,7 +417,9 @@ export function AnalysisApp() {
         maxResults: 10,
         language: "en",
       });
-      saveRecommendationRequestForResume(selectedResumeId, recommendationBody);
+      if (recommendationBody.skills.length > 0) {
+        saveRecommendationRequestForResume(selectedResumeId, recommendationBody);
+      }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Analysis failed.";
       setInputError(`AI analysis failed: ${message}`);
