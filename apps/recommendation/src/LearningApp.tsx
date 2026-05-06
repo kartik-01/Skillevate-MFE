@@ -59,23 +59,25 @@ type SkillPage = {
   recommendations: Course[];
 };
 
-type ApiRecommendation = {
-  id: string;
+type UserRecommendation = {
+  recommendation_id: string;
   title: string;
   provider: string;
   url: string;
   description: string;
+  tags: string[];
   relevance_score: number;
-  channel_name?: string | null;
-  org_login?: string | null;
+  status: string;
+  xp_value: number;
+  linked_gap: string;
 };
 
-type ApiResponse = {
-  results: Array<{
-    skill: string;
-    total_results: number;
-    recommendations: ApiRecommendation[];
-  }>;
+type UserRecommendationResponse = {
+  analysis_id: string;
+  user_id: string;
+  gaps: string[];
+  recommendations: UserRecommendation[];
+  cached: boolean;
 };
 
 type SkillRequest = {
@@ -88,7 +90,9 @@ const RECOMMENDATION_REQUEST_STORAGE_KEY = "skillevate-recommendation-request-v1
 // Injected by webpack `DefinePlugin` from `Skillevate-MFE/.env`. We don't
 // fall back to a localhost URL so misconfigurations fail loudly at the
 // network layer instead of pointing at a wrong service.
-const RECOMMENDATION_API_URL = process.env.SKILLEVATE_RECOMMENDATION_URL || "";
+const RECOMMENDATION_API_URL =
+  process.env.SKILLEVATE_RECOMMENDATION_URL ||
+  "https://shark-app-yuqy7.ondigitalocean.app/api/user-recommendations";
 const AUTH0_AUDIENCE = process.env.AUTH0_AUDIENCE || "";
 
 const reactImg =
@@ -161,39 +165,60 @@ function readStoredRecommendationRequest(resumeId: string): RecommendationReques
   }
 }
 
-function mapApiToSkillPages(apiResponse: ApiResponse): SkillPage[] {
-  return apiResponse.results.map((item) => ({
-    skill: item.skill,
-    total_results: item.total_results,
-    recommendations: item.recommendations.map((rec) => ({
-      id: rec.id,
-      title: rec.title,
+function normalizeRecommendationTitle(title: string) {
+  return title
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^\s+|\s+$/g, "");
+}
+
+function mapUserRecommendationsToSkillPages(response: UserRecommendationResponse): SkillPage[] {
+  const grouped = response.gaps.reduce<Record<string, UserRecommendation[]>>((acc, gap) => {
+    acc[gap] = [];
+    return acc;
+  }, {});
+
+  response.recommendations.forEach((item) => {
+    const gap = item.linked_gap || "General";
+    if (!grouped[gap]) grouped[gap] = [];
+    grouped[gap].push(item);
+  });
+
+  return Object.entries(grouped).map(([skill, recommendations]) => ({
+    skill,
+    total_results: recommendations.length,
+    recommendations: recommendations.map((rec) => ({
+      id: rec.recommendation_id,
+      title: normalizeRecommendationTitle(rec.title),
       url: rec.url,
-      target: item.skill,
-      skill: item.skill,
+      target: skill,
+      skill,
       description: rec.description,
       provider: rec.provider,
-      providerDetail: rec.channel_name || rec.org_login || rec.provider,
-      thumbnail: getPlaceholderImage(item.skill),
+      providerDetail: rec.provider,
+      thumbnail: getPlaceholderImage(skill),
       duration: "N/A",
-      xp: Math.max(40, Math.round((rec.relevance_score || 0.2) * 200)),
+      xp: rec.xp_value,
     })),
   }));
 }
 
-async function fetchSkillRecommendations(body: RecommendationRequestBody, signal: AbortSignal): Promise<SkillPage[]> {
+async function fetchUserRecommendations(userId: string, signal: AbortSignal) {
   const response = await fetch(RECOMMENDATION_API_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ user_id: userId }),
     signal,
   });
-  if (!response.ok) throw new Error(`API status ${response.status}`);
-  return mapApiToSkillPages((await response.json()) as ApiResponse);
+  if (!response.ok) {
+    throw new Error(`Recommendation API status ${response.status}`);
+  }
+  return (await response.json()) as UserRecommendationResponse;
 }
 
 export function LearningApp() {
-  const { getAccessTokenSilently, isAuthenticated } = useAuth0();
+  const { getAccessTokenSilently, isAuthenticated, user } = useAuth0();
   const [resumeVersions, setResumeVersions] = useState<ResumeVersion[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState("");
   const [analysisByResumeId, setAnalysisByResumeId] = useState<Record<string, AnalysisResult>>({});
@@ -204,6 +229,7 @@ export function LearningApp() {
   const [isLoadingCourses, setIsLoadingCourses] = useState(false);
   const [progress, setProgress] = useState<GamificationProgress | null>(null);
   const [statusMessage, setStatusMessage] = useState("");
+  const [apiGaps, setApiGaps] = useState<string[]>([]);
   const [completionFeedback, setCompletionFeedback] = useState("");
   const [completingCourseId, setCompletingCourseId] = useState<string | null>(null);
   const carouselRef = useRef<HTMLDivElement | null>(null);
@@ -254,23 +280,23 @@ export function LearningApp() {
   );
 
   useEffect(() => {
-    if (!selectedAnalysis) {
+    const userId = user?.sub;
+    if (!isAuthenticated || !userId) {
       setSkillPages([]);
+      setApiGaps([]);
       setCurrentSkillIndex(0);
+      setCurrentRecommendationIndex(0);
       return;
     }
 
     const controller = new AbortController();
     setIsLoadingCourses(true);
-    const effectiveRequest = recommendationRequest ?? (selectedAnalysis.gaps.length > 0 ? buildFallbackRecommendationRequest(selectedAnalysis.gaps) : null);
-    if (!effectiveRequest) {
-      setSkillPages([]);
-      setIsLoadingCourses(false);
-      return;
-    }
-    fetchSkillRecommendations(effectiveRequest, controller.signal)
-      .then((pages) => {
-        setSkillPages(pages);
+    setApiGaps([]);
+
+    fetchUserRecommendations(userId, controller.signal)
+      .then((response) => {
+        setApiGaps(response.gaps ?? []);
+        setSkillPages(mapUserRecommendationsToSkillPages(response));
         setCurrentSkillIndex(0);
         setCurrentRecommendationIndex(0);
       })
@@ -278,13 +304,14 @@ export function LearningApp() {
         if (error instanceof DOMException && error.name === "AbortError") return;
         console.error("Failed to fetch learning path recommendations:", error);
         setSkillPages([]);
+        setApiGaps([]);
       })
       .finally(() => {
         if (!controller.signal.aborted) setIsLoadingCourses(false);
       });
 
     return () => controller.abort();
-  }, [selectedAnalysis, recommendationRequest]);
+  }, [isAuthenticated, user?.sub]);
 
   useEffect(() => {
     if (!selectedResume || !selectedAnalysis || !isAuthenticated) return;
@@ -355,13 +382,18 @@ export function LearningApp() {
   };
 
   const hasAnyAnalysis = Object.keys(analysisByResumeId).length > 0;
+  const hasRecommendations = skillPages.length > 0;
+  const gapsToDisplay = apiGaps.length > 0
+    ? apiGaps
+    : selectedAnalysis?.gaps.map((gap) => gap.name) ?? [];
+  const resumeLabel = selectedResume?.label ?? "your account";
 
-  if (!hasAnyAnalysis || !selectedResume) {
+  if (!hasAnyAnalysis && !hasRecommendations) {
     return (
       <div className="glass-card rounded-3xl border border-border/60 p-8 text-center animate-slide-in-up">
         <p className="font-semibold text-foreground">No learning recommendations yet.</p>
         <p className="mt-2 text-sm text-muted-foreground">
-          Run gap analysis first to generate AI-curated courses for each resume version.
+          Run gap analysis first or make sure your account has recommendations available.
         </p>
       </div>
     );
@@ -389,7 +421,7 @@ export function LearningApp() {
                 ))}
               </select>
             ) : (
-              <span className="text-sm font-semibold text-foreground">{selectedResume.label}</span>
+              <span className="text-sm font-semibold text-foreground">{resumeLabel}</span>
             )}
           </div>
         </div>
@@ -420,11 +452,15 @@ export function LearningApp() {
               Verified Skills
             </p>
             <div className="flex flex-wrap gap-2">
-              {selectedAnalysis?.verifiedSkills.map((skill) => (
-                <span key={skill} className="rounded-lg border border-border bg-accent px-3 py-1.5 text-xs text-foreground">
-                  {skill}
-                </span>
-              ))}
+              {selectedAnalysis?.verifiedSkills.length ? (
+                selectedAnalysis.verifiedSkills.map((skill) => (
+                  <span key={skill} className="rounded-lg border border-border bg-accent px-3 py-1.5 text-xs text-foreground">
+                    {skill}
+                  </span>
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground">No local analysis available.</p>
+              )}
             </div>
           </div>
           <div>
@@ -433,11 +469,15 @@ export function LearningApp() {
               Skill Gaps
             </p>
             <div className="flex flex-wrap gap-2">
-              {selectedAnalysis?.gaps.map((gap) => (
-                <span key={gap.name} className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-1.5 text-xs text-amber-700">
-                  {gap.name}
-                </span>
-              ))}
+              {gapsToDisplay.length > 0 ? (
+                gapsToDisplay.map((gap) => (
+                  <span key={gap} className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-1.5 text-xs text-amber-700">
+                    {gap}
+                  </span>
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground">No gap data available yet.</p>
+              )}
             </div>
           </div>
         </div>
@@ -448,7 +488,7 @@ export function LearningApp() {
           <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-accent text-primary">
             <Loader2 size={20} className="animate-spin" />
           </div>
-          <p className="font-semibold text-foreground">Finding best courses for {selectedResume.label}...</p>
+          <p className="font-semibold text-foreground">Finding best courses for {resumeLabel}...</p>
         </div>
       ) : currentSkillPage && currentSkillPage.recommendations.length > 0 ? (
         <>
