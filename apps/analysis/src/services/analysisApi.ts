@@ -71,6 +71,7 @@ const API_ROUTES = {
   analyzeDirect: analysisApiRelativePath("analysis/gap"),
   analyzeText: analysisApiRelativePath("v1/analyzer/analyze"),
   analyzePdf: analysisApiRelativePath("v1/analyzer/analyze/pdf"),
+  saveAnalysis: analysisApiRelativePath("analyses"),
 };
 
 const getDefaultInference = (): string => (process.env.ANALYSIS_DEFAULT_INFERENCE ?? "").trim();
@@ -228,6 +229,58 @@ export const analyzeDirect = async (
       resume_skills: resumeSkills,
       jd_skills: jdSkills,
     }),
+  });
+};
+
+// ── Persistence (MongoDB Atlas via backend `analyses` collection) ────────────
+
+export type AnalysisGapItem = {
+  skill: string;
+  preferences: string[];
+};
+
+export type SaveAnalysisPayload = {
+  user_id: string;
+  /** Server forces this to true regardless of input. Kept optional for symmetry. */
+  is_latest?: boolean;
+  resume_metadata: {
+    filename: string;
+    /** ISO 8601 timestamp. */
+    upload_date: string;
+  };
+  jd_metadata: {
+    title: string;
+    raw_text: string;
+  };
+  results: {
+    /** 0..100 integer. */
+    match_score: number;
+    gaps: AnalysisGapItem[];
+    /** Server forces []; the field is owned by another microservice. */
+    recommendations?: never[];
+  };
+};
+
+export type SaveAnalysisResponse = {
+  id: string;
+  user_id: string;
+  is_latest: boolean;
+};
+
+/**
+ * Persists a successful gap-analysis run to the backend `analyses` collection.
+ * The server demotes prior `is_latest` rows for the same `user_id` and inserts
+ * the new document with `is_latest=true`.
+ */
+export const saveAnalysis = async (
+  payload: SaveAnalysisPayload,
+): Promise<SaveAnalysisResponse> => {
+  return request<SaveAnalysisResponse>(API_ROUTES.saveAnalysis, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
   });
 };
 
