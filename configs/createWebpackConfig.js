@@ -17,6 +17,9 @@ const { getEnvDefinitions } = require("./env");
 // Add new keys here when the runtime needs them; do not embed default URLs.
 const RUNTIME_ENV_KEYS = [
   "ANALYSIS_API_BASE_URL",
+  "ANALYSIS_API_PATH_ROOT",
+  "ANALYSIS_DEFAULT_INFERENCE",
+  "ANALYSIS_RESUME_PARSER_INFERENCE",
   "SKILLEVATE_GAMIFICATION_URL",
   "SKILLEVATE_RECOMMENDATION_URL",
   "USER_SERVICE_URL",
