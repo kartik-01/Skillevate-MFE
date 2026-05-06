@@ -23,10 +23,12 @@
  * clear error — we deliberately don't fall back to localhost so missing
  * configuration fails loudly instead of silently hitting a wrong host.
  */
+// Webpack `DefinePlugin` (see configs/createWebpackConfig.js) replaces the
+// `process.env.USER_SERVICE_URL` token with a string literal at build time,
+// so this evaluates to either the configured URL or "" — no `process` runtime
+// global is required (and assuming one breaks in the browser bundle).
 const USER_SERVICE_URL: string =
-  typeof process !== "undefined" && process.env && process.env.USER_SERVICE_URL
-    ? process.env.USER_SERVICE_URL
-    : "";
+  (process.env.USER_SERVICE_URL as string | undefined) ?? "";
 
 function assertConfigured(): void {
   if (!USER_SERVICE_URL) {
