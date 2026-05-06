@@ -1,8 +1,18 @@
 import React, { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useAuth0 } from "@auth0/auth0-react";
 import { Target, Upload, Zap, CheckCircle2, AlertTriangle, Trash2, Loader2, ArrowRight } from "lucide-react";
 // Updated imports to use the new lightning-fast pipeline functions
-import { analyzeDirect, extractJdFile, extractJdText, parseResumeSkills, ResumeSkills, JdSkillsResponse } from "./services/analysisApi";
+import {
+  analyzeDirect,
+  extractJdFile,
+  extractJdText,
+  parseResumeSkills,
+  saveAnalysis,
+  AnalysisGapItem,
+  ResumeSkills,
+  JdSkillsResponse,
+} from "./services/analysisApi";
 import {
   buildRecommendationRequestFromAnalysis,
   removeRecommendationRequestForResume,
@@ -97,7 +107,16 @@ const normalizePersistedAnalysisEntry = (raw: unknown): AnalysisResult => {
 };
 
 export function AnalysisApp() {
-  const currentUserName = "UserName";
+  const { user: auth0User, isAuthenticated } = useAuth0();
+  const auth0FirstName: string =
+    typeof auth0User?.given_name === "string" && auth0User.given_name.trim().length > 0
+      ? auth0User.given_name.trim()
+      : typeof auth0User?.name === "string" && auth0User.name.trim().length > 0
+        ? auth0User.name.trim().split(/\s+/)[0]
+        : typeof auth0User?.nickname === "string" && auth0User.nickname.trim().length > 0
+          ? auth0User.nickname.trim()
+          : "UserName";
+  const currentUserName: string = isAuthenticated ? auth0FirstName : "UserName";
 
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [jobDescription, setJobDescription] = useState("");
@@ -131,7 +150,6 @@ export function AnalysisApp() {
   const hasAnyAnalysis = Object.keys(analysisByResumeId).length > 0;
 
   const jdExtractReady = jdExtractState.status === "ready" && Boolean(jdExtractState.skills);
-  const canUploadResume = jdExtractReady;
   const resumePdfReady = Boolean(selectedResumeId && resumePdfById[selectedResumeId]);
 
   const runAnalysisDisabledTitle =
@@ -239,12 +257,6 @@ export function AnalysisApp() {
   const handleResumeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
     if (!file) return;
-
-    if (!canUploadResume) {
-      setInputError("Add a job description first and wait for requirements to be extracted before uploading a resume.");
-      event.target.value = "";
-      return;
-    }
 
     if (!isAllowedFileExtension(file, ACCEPTED_RESUME_EXTENSIONS)) {
       setInputError("Resume must be a .pdf file.");
@@ -420,6 +432,52 @@ export function AnalysisApp() {
       if (recommendationBody.skills.length > 0) {
         saveRecommendationRequestForResume(selectedResumeId, recommendationBody);
       }
+
+      // Persist the analysis to MongoDB Atlas via the backend.
+      // This is intentionally non-blocking: any failure here is logged but
+      // must NOT roll back the in-memory result or recommendation save above.
+      const userId: string | null =
+        (auth0User as { sub?: string } | undefined)?.sub ?? null;
+      if (userId) {
+        const gapsForDb: AnalysisGapItem[] = [
+          ...criticalGaps.map((skill) => ({
+            skill,
+            preferences: ["critical gap", "high priority"],
+          })),
+          ...preferredGaps.map((skill) => ({
+            skill,
+            preferences: ["skill gap", "medium priority"],
+          })),
+        ];
+        const matchScore = Math.max(
+          0,
+          Math.min(100, Math.round(generatedResult.matchPercent)),
+        );
+        const resumePdfFile: File | undefined = resumePdfById[selectedResumeId];
+        const jdTitle =
+          jdExtractState.skills?.role_title?.trim() ||
+          jobFile?.name?.replace(/\.[^.]+$/, "") ||
+          "Untitled JD";
+        const jdRawText = jobDescription?.trim() || jobFile?.name || "";
+
+        try {
+          await saveAnalysis({
+            user_id: userId,
+            resume_metadata: {
+              filename:
+                resumePdfFile?.name ??
+                selectedResume?.originalFileName ??
+                "resume.pdf",
+              upload_date:
+                selectedResume?.uploadedAt ?? new Date().toISOString(),
+            },
+            jd_metadata: { title: jdTitle, raw_text: jdRawText },
+            results: { match_score: matchScore, gaps: gapsForDb },
+          });
+        } catch (err) {
+          console.warn("[analysis] saveAnalysis failed:", err);
+        }
+      }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Analysis failed.";
       setInputError(`AI analysis failed: ${message}`);
@@ -519,17 +577,11 @@ export function AnalysisApp() {
             </p>
           </div>
 
-          {/* Step 2: Resume after JD is extracted */}
+          {/* Step 2: Resume (independent of JD extraction; recommended order only) */}
           <button
             type="button"
-            disabled={!canUploadResume}
             onClick={() => resumeInputRef.current?.click()}
-            className={`border-2 border-dashed border-border rounded-2xl p-6 flex flex-col items-center justify-center text-center transition-colors bg-secondary/30 ${
-              canUploadResume
-                ? "hover:border-primary/70 cursor-pointer"
-                : "opacity-50 cursor-not-allowed"
-            }`}
-            title={canUploadResume ? undefined : "Add a job description and wait for extraction before uploading a resume"}
+            className="border-2 border-dashed border-border rounded-2xl p-6 flex flex-col items-center justify-center text-center transition-colors bg-secondary/30 hover:border-primary/70 cursor-pointer"
           >
             <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm text-[#1DB896] mb-3">
               <Upload size={20} />
@@ -539,9 +591,6 @@ export function AnalysisApp() {
               <p className="text-sm font-semibold text-foreground">Upload Resume</p>
             </div>
             <p className="text-xs text-muted-foreground mt-1">PDF (Max 5MB)</p>
-            {!canUploadResume ? (
-              <p className="text-xs text-muted-foreground mt-2 max-w-full">Available after job requirements are extracted.</p>
-            ) : null}
             <p className="text-xs text-muted-foreground mt-3 truncate max-w-full">
               {selectedResume
                 ? `Selected: ${selectedResume.label} (${selectedResume.originalFileName})`
