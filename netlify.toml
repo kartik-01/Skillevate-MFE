@@ -1,0 +1,11 @@
+[[redirects]]
+  from = "/api-user/*"
+  to = "http://157.230.153.85:8000/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api-analysis/*"
+  to = "http://157.230.153.85:8001/:splat"
+  status = 200
+  force = true
