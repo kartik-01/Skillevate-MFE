@@ -11,7 +11,7 @@ COPY configs ./configs
 COPY packages ./packages
 COPY apps ./apps
 
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 
 FROM deps AS builder
 ARG APP_NAME
