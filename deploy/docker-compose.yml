@@ -1,0 +1,84 @@
+# Run from this directory after `cp .env.deploy.example .env.deploy`:
+#   docker compose --env-file .env.deploy up --build
+#
+# Populate `deploy/.env.deploy` first (copy from `.env.deploy.example`). Those values are wired as build-args,
+# matching how Skillevate-MFE loads env at webpack build time.
+#
+# Public URLs today: localhost ports below. Behind DigitalOcean / a VPS, terminate TLS on a reverse proxy and map
+# `REMOTE_*_URL` in `.env.deploy` to the HTTPS origins remoteEntry.js lives on.
+
+services:
+  app-shell:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        APP_NAME: app-shell
+        REMOTE_RECOMMENDATION_URL: ${REMOTE_RECOMMENDATION_URL}
+        REMOTE_GAMIFY_URL: ${REMOTE_GAMIFY_URL}
+        REMOTE_ANALYSIS_URL: ${REMOTE_ANALYSIS_URL}
+        USER_SERVICE_URL: ${USER_SERVICE_URL:-}
+        SKILLEVATE_RECOMMENDATION_URL: ${SKILLEVATE_RECOMMENDATION_URL:-}
+        SKILLEVATE_GAMIFICATION_URL: ${SKILLEVATE_GAMIFICATION_URL:-}
+        ANALYSIS_API_BASE_URL: ${ANALYSIS_API_BASE_URL:-}
+        ANALYSIS_API_PATH_ROOT: ${ANALYSIS_API_PATH_ROOT:-}
+        ANALYSIS_DEFAULT_INFERENCE: ${ANALYSIS_DEFAULT_INFERENCE:-}
+        ANALYSIS_RESUME_PARSER_INFERENCE: ${ANALYSIS_RESUME_PARSER_INFERENCE:-}
+        AUTH0_AUDIENCE: ${AUTH0_AUDIENCE:-}
+        HOST_RELOAD_URL: ""
+    ports:
+      - "${HOST_APP_SHELL_PORT:-8080}:80"
+
+  recommendation:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        APP_NAME: recommendation
+        USER_SERVICE_URL: ${USER_SERVICE_URL:-}
+        SKILLEVATE_RECOMMENDATION_URL: ${SKILLEVATE_RECOMMENDATION_URL:-}
+        SKILLEVATE_GAMIFICATION_URL: ${SKILLEVATE_GAMIFICATION_URL:-}
+        ANALYSIS_API_BASE_URL: ${ANALYSIS_API_BASE_URL:-}
+        ANALYSIS_API_PATH_ROOT: ${ANALYSIS_API_PATH_ROOT:-}
+        ANALYSIS_DEFAULT_INFERENCE: ${ANALYSIS_DEFAULT_INFERENCE:-}
+        ANALYSIS_RESUME_PARSER_INFERENCE: ${ANALYSIS_RESUME_PARSER_INFERENCE:-}
+        AUTH0_AUDIENCE: ${AUTH0_AUDIENCE:-}
+        HOST_RELOAD_URL: ""
+    ports:
+      - "${HOST_RECOMMENDATION_PORT:-8081}:80"
+
+  gamify:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        APP_NAME: gamify
+        USER_SERVICE_URL: ${USER_SERVICE_URL:-}
+        SKILLEVATE_RECOMMENDATION_URL: ${SKILLEVATE_RECOMMENDATION_URL:-}
+        SKILLEVATE_GAMIFICATION_URL: ${SKILLEVATE_GAMIFICATION_URL:-}
+        ANALYSIS_API_BASE_URL: ${ANALYSIS_API_BASE_URL:-}
+        ANALYSIS_API_PATH_ROOT: ${ANALYSIS_API_PATH_ROOT:-}
+        ANALYSIS_DEFAULT_INFERENCE: ${ANALYSIS_DEFAULT_INFERENCE:-}
+        ANALYSIS_RESUME_PARSER_INFERENCE: ${ANALYSIS_RESUME_PARSER_INFERENCE:-}
+        AUTH0_AUDIENCE: ${AUTH0_AUDIENCE:-}
+        HOST_RELOAD_URL: ""
+    ports:
+      - "${HOST_GAMIFY_PORT:-8082}:80"
+
+  analysis:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        APP_NAME: analysis
+        USER_SERVICE_URL: ${USER_SERVICE_URL:-}
+        SKILLEVATE_RECOMMENDATION_URL: ${SKILLEVATE_RECOMMENDATION_URL:-}
+        SKILLEVATE_GAMIFICATION_URL: ${SKILLEVATE_GAMIFICATION_URL:-}
+        ANALYSIS_API_BASE_URL: ${ANALYSIS_API_BASE_URL:-}
+        ANALYSIS_API_PATH_ROOT: ${ANALYSIS_API_PATH_ROOT:-}
+        ANALYSIS_DEFAULT_INFERENCE: ${ANALYSIS_DEFAULT_INFERENCE:-}
+        ANALYSIS_RESUME_PARSER_INFERENCE: ${ANALYSIS_RESUME_PARSER_INFERENCE:-}
+        AUTH0_AUDIENCE: ${AUTH0_AUDIENCE:-}
+        HOST_RELOAD_URL: ""
+    ports:
+      - "${HOST_ANALYSIS_PORT:-8083}:80"
