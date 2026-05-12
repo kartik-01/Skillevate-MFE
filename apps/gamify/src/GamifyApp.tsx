@@ -404,8 +404,8 @@ export function GamifyApp() {
 
   // ── Derived display values ────────────────────────────────────────────────
 
-  const totalXp = progress?.totalXp ?? 1200;
-  const nextLevelXp = progress?.nextLevelXp ?? 1800;
+  const totalXp = progress?.totalXp ?? 0;
+  const nextLevelXp = progress?.nextLevelXp ?? 600;
   const currentStreak = progress?.currentStreak ?? 0;
   const tier = heroTier(totalXp);
   const TIER_START_XP: Record<string, number> = { Apprentice: 0, Ranger: 600, Champion: 1200, Legend: 1800 };
