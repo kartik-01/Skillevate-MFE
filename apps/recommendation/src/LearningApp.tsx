@@ -350,6 +350,9 @@ export function LearningApp() {
         if (!isActive) return;
         setProgress(nextProgress);
         setStatusMessage("");
+        window.dispatchEvent(new CustomEvent("skillevate-xp-updated", {
+          detail: { level: nextProgress.level, totalXp: nextProgress.totalXp, nextLevelXp: nextProgress.nextLevelXp },
+        }));
       })
       .catch((error) => {
         if (!isActive) return;
@@ -390,6 +393,9 @@ export function LearningApp() {
       setProgress(nextProgress);
       setCompletionFeedback(`Completed ${course.title} (+${course.xp} XP)`);
       window.dispatchEvent(new Event("skillevate-gamification-updated"));
+      window.dispatchEvent(new CustomEvent("skillevate-xp-updated", {
+        detail: { level: nextProgress.level, totalXp: nextProgress.totalXp, nextLevelXp: nextProgress.nextLevelXp },
+      }));
     } catch (error) {
       setCompletionFeedback(error instanceof Error ? error.message : "Unable to complete course.");
     } finally {

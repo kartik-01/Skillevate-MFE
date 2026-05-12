@@ -63,6 +63,7 @@ export default function App() {
   const [Recommendation, setRecommendation] = useState<RemoteModule>(null);
   const [Gamify, setGamify] = useState<RemoteModule>(null);
   const [Analysis, setAnalysis] = useState<RemoteModule>(null);
+  const [xpInfo, setXpInfo] = useState<{ level: number; totalXp: number; nextLevelXp: number } | null>(null);
   const firstName = user?.name?.split(" ")[0] || "Learner";
   const avatarSrc =
     typeof user?.picture === "string" && user.picture.length > 0 ? user.picture : FALLBACK_AVATAR;
@@ -158,6 +159,15 @@ export default function App() {
     };
   }, [getAccessTokenSilently, isAuthenticated]);
 
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { level: number; totalXp: number; nextLevelXp: number };
+      setXpInfo(detail);
+    };
+    window.addEventListener("skillevate-xp-updated", handler);
+    return () => window.removeEventListener("skillevate-xp-updated", handler);
+  }, []);
+
   // Render selected MFE
   const renderSelectedApp = () => {
     const Component =
@@ -237,9 +247,11 @@ export default function App() {
                         className="w-full h-full rounded-full object-cover"
                       />
                     </div>
-                    <div className="absolute -bottom-2 -right-2 bg-[#1DB896] text-white text-xs font-bold px-2 py-1 rounded-full border-2 border-white dark:border-[#132825] flex items-center shadow-sm">
-                      Lvl 4
-                    </div>
+                    {xpInfo && (
+                      <div className="absolute -bottom-2 -right-2 bg-[#1DB896] text-white text-xs font-bold px-2 py-1 rounded-full border-2 border-white dark:border-[#132825] flex items-center shadow-sm">
+                        Lvl {xpInfo.level}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
@@ -251,20 +263,29 @@ export default function App() {
                     </p>
                   </div>
                 </div>
-                <div className="w-full md:w-64 bg-[#F0F9F7] dark:bg-[#0f1f1c] rounded-2xl p-4">
-                  <div className="flex justify-between text-sm font-semibold mb-2">
-                    <span className="text-slate-700 dark:text-slate-200">Level 4</span>
-                    <span className="text-[#1DB896]">1,200 / 2,000 XP</span>
-                  </div>
-                  <div className="h-2 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: "60%" }}
-                      transition={{ duration: 1, ease: "easeOut" }}
-                      className="h-full bg-[#1DB896] rounded-full"
-                    />
-                  </div>
-                </div>
+                {xpInfo ? (() => {
+                  const TIER_START: Record<number, number> = { 1: 0, 2: 600, 3: 1200, 4: 1800 };
+                  const tierStart = TIER_START[xpInfo.level] ?? 0;
+                  const pct = xpInfo.level === 4
+                    ? 100
+                    : Math.min(100, Math.round(((xpInfo.totalXp - tierStart) / (xpInfo.nextLevelXp - tierStart)) * 100));
+                  return (
+                    <div className="w-full md:w-64 bg-[#F0F9F7] dark:bg-[#0f1f1c] rounded-2xl p-4">
+                      <div className="flex justify-between text-sm font-semibold mb-2">
+                        <span className="text-slate-700 dark:text-slate-200">Level {xpInfo.level}</span>
+                        <span className="text-[#1DB896]">{xpInfo.totalXp.toLocaleString()} / {xpInfo.nextLevelXp.toLocaleString()} XP</span>
+                      </div>
+                      <div className="h-2 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${pct}%` }}
+                          transition={{ duration: 1, ease: "easeOut" }}
+                          className="h-full bg-[#1DB896] rounded-full"
+                        />
+                      </div>
+                    </div>
+                  );
+                })() : null}
               </section>
 
               <div className="flex p-1 bg-white dark:bg-[#132825] rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 w-fit">

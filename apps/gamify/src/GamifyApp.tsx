@@ -308,6 +308,9 @@ export function GamifyApp() {
         recommendationRequest,
       });
       setProgress(nextProgress);
+      window.dispatchEvent(new CustomEvent("skillevate-xp-updated", {
+        detail: { level: nextProgress.level, totalXp: nextProgress.totalXp, nextLevelXp: nextProgress.nextLevelXp },
+      }));
     } catch (error) {
       setProgress(null);
       setMessage(error instanceof Error ? error.message : "Unable to load gamification progress.");
@@ -358,6 +361,9 @@ export function GamifyApp() {
       const nextProgress = await completeCourse(token, courseId, resume.id, analysisId);
       setProgress(nextProgress);
       window.dispatchEvent(new Event("skillevate-gamification-updated"));
+      window.dispatchEvent(new CustomEvent("skillevate-xp-updated", {
+        detail: { level: nextProgress.level, totalXp: nextProgress.totalXp, nextLevelXp: nextProgress.nextLevelXp },
+      }));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to complete course.");
     } finally {
