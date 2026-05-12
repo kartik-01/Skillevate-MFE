@@ -13,6 +13,7 @@ import {
 import {
   completeCourse,
   syncAnalysis,
+  type CoursePayload,
   type GamificationProgress,
   type RecommendationRequestBody,
 } from "./gamificationApi";
@@ -314,7 +315,21 @@ export function LearningApp() {
   }, [isAuthenticated, user?.sub]);
 
   useEffect(() => {
-    if (!selectedResume || !selectedAnalysis || !isAuthenticated) return;
+    if (!selectedResume || !selectedAnalysis || !isAuthenticated || skillPages.length === 0) return;
+
+    const courses: CoursePayload[] = skillPages.flatMap((page) =>
+      page.recommendations.map((c) => ({
+        courseId: c.id,
+        title: c.title,
+        url: c.url,
+        provider: c.provider,
+        providerDetail: c.providerDetail,
+        description: c.description,
+        targetSkill: c.skill,
+        relevanceScore: 0.5,
+        xp: c.xp,
+      })),
+    );
 
     let isActive = true;
     setStatusMessage("Syncing gamification progress...");
@@ -328,6 +343,7 @@ export function LearningApp() {
           gaps: selectedAnalysis.gaps,
           jobDescription,
           recommendationRequest,
+          courses,
         }),
       )
       .then((nextProgress) => {
@@ -344,7 +360,7 @@ export function LearningApp() {
     return () => {
       isActive = false;
     };
-  }, [selectedResume?.id, selectedAnalysis, analysisId, jobDescription, isAuthenticated, recommendationRequest]);
+  }, [selectedResume?.id, selectedAnalysis, analysisId, jobDescription, isAuthenticated, recommendationRequest, skillPages]);
 
   useEffect(() => {
     setCurrentRecommendationIndex(0);

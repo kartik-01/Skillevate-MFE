@@ -33,6 +33,18 @@ export type GamificationProgress = {
   courses: GamificationCourse[];
 };
 
+export type CoursePayload = {
+  courseId: string;
+  title: string;
+  url: string;
+  provider: string;
+  providerDetail: string;
+  description: string;
+  targetSkill: string;
+  relevanceScore: number;
+  xp: number;
+};
+
 export type SyncAnalysisPayload = {
   resumeId: string;
   resumeLabel: string;
@@ -41,6 +53,7 @@ export type SyncAnalysisPayload = {
   gaps: AnalysisGap[];
   jobDescription?: string;
   recommendationRequest?: RecommendationRequestBody | null;
+  courses?: CoursePayload[];
 };
 
 // Injected by webpack `DefinePlugin` from `Skillevate-MFE/.env`. Empty when
