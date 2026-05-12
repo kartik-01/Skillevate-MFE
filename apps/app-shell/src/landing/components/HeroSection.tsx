@@ -1,4 +1,4 @@
-import { ArrowRight, Sparkles, Brain, Target, Briefcase, TrendingUp, BookOpen, Trophy } from 'lucide-react';
+import { ArrowRight, Sparkles, Brain, Target } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 
@@ -102,68 +102,6 @@ export default function HeroSection({ onTryNow, onLearnMore }: HeroSectionProps)
           </div>
         </div>
 
-        {/* Hero Visual - Dashboard Preview */}
-        <div className="mt-20 animate-slide-in-up" style={{ animationDelay: '3.1s' }}>
-          <div className="relative">
-            {/* Glow effect behind preview */}
-            <div className="absolute inset-0 gradient-primary rounded-3xl blur-3xl opacity-20" />
-            
-            {/* Preview Container */}
-            <div className="relative glass-card rounded-2xl p-2 overflow-hidden">
-              <div className="bg-gradient-to-br from-cyan-500/10 to-teal-500/10 dark:from-cyan-500/20 dark:to-teal-500/20 rounded-xl p-8 backdrop-blur-xl">
-                {/* Metric Cards */}
-                <div className="grid grid-cols-3 gap-4 mb-6">
-                  {/* Skill Coverage Card */}
-                  <div className="glass-card rounded-lg p-4">
-                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center mb-3">
-                      <Briefcase className="w-5 h-5 text-white" />
-                    </div>
-                    <p className="text-xs text-muted-foreground mb-1">Target Role</p>
-                    <p className="text-2xl text-foreground">PM</p>
-                    <p className="text-xs text-emerald-600 dark:text-emerald-500/70 mt-1">Role mapped</p>
-                  </div>
-
-                  {/* Gap Score Card */}
-                  <div className="glass-card rounded-lg p-4">
-                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-red-500 to-pink-500 flex items-center justify-center mb-3">
-                      <TrendingUp className="w-5 h-5 text-white" />
-                    </div>
-                    <p className="text-xs text-muted-foreground mb-1">Gap Score</p>
-                    <p className="text-2xl text-foreground">34%</p>
-                    <p className="text-xs text-muted-foreground mt-1">Improving</p>
-                  </div>
-
-                  {/* Motivation Card */}
-                  <div className="glass-card rounded-lg p-4">
-                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center mb-3">
-                      <Trophy className="w-5 h-5 text-white" />
-                    </div>
-                    <p className="text-xs text-muted-foreground mb-1">Level</p>
-                    <p className="text-2xl text-foreground">7</p>
-                    <p className="text-xs text-emerald-600 dark:text-emerald-500/70 mt-1">+2 badges</p>
-                  </div>
-                </div>
-
-                {/* Chart Preview */}
-                <div className="glass-card rounded-lg p-6">
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-sm text-foreground">Skill Progress</p>
-                    <BookOpen className="w-4 h-4 text-cyan-500" />
-                  </div>
-                  <div className="flex items-end justify-between gap-2 h-32">
-                    <div className="flex-1 bg-gradient-to-t from-cyan-600 to-teal-400 rounded-t" style={{ height: '45%' }} />
-                    <div className="flex-1 bg-gradient-to-t from-cyan-600 to-teal-400 rounded-t" style={{ height: '75%' }} />
-                    <div className="flex-1 bg-gradient-to-t from-teal-600 to-emerald-400 rounded-t" style={{ height: '60%' }} />
-                    <div className="flex-1 bg-gradient-to-t from-teal-600 to-emerald-400 rounded-t" style={{ height: '95%' }} />
-                    <div className="flex-1 bg-gradient-to-t from-emerald-600 to-green-400 rounded-t" style={{ height: '55%' }} />
-                    <div className="flex-1 bg-gradient-to-t from-emerald-600 to-green-400 rounded-t" style={{ height: '85%' }} />
-                    <div className="flex-1 bg-gradient-to-t from-teal-600 to-emerald-400 rounded-t" style={{ height: '70%' }} />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     </section>
   );

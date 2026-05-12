@@ -2,7 +2,7 @@ import React, { useEffect, useState, Suspense } from "react";
 import { useAuth0 } from "@auth0/auth0-react";
 import { loadRemoteSafely } from "./utils/loadRemoteSafely";
 import { motion, AnimatePresence } from "framer-motion";
-import { Target, TrendingUp, PlaySquare, Award } from "lucide-react";
+import { TrendingUp, PlaySquare, Award } from "lucide-react";
 import LandingHome from "./landing/LandingHome";
 import Footer from "./landing/components/Footer";
 import Header from "./landing/components/Header";
@@ -257,10 +257,6 @@ export default function App() {
                     <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
                       Welcome back, {firstName}
                     </h1>
-                    <p className="text-slate-500 dark:text-slate-300 font-medium flex items-center gap-2 mt-1">
-                      <Target size={16} className="text-[#1DB896]" />
-                      Target Role: Senior Frontend Engineer
-                    </p>
                   </div>
                 </div>
                 {xpInfo ? (() => {

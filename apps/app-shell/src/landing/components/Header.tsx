@@ -1,4 +1,4 @@
-import { Compass, Github, Sun, Moon } from 'lucide-react';
+import { Compass, Sun, Moon } from 'lucide-react';
 import { Button } from './ui/button';
 import { useTheme } from './ThemeProvider';
 
@@ -25,13 +25,6 @@ export default function Header({
     setTheme(theme === 'dark' ? 'light' : 'dark');
   };
 
-  const scrollToFeatures = () => {
-    document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  const scrollToPrivacy = () => {
-    document.getElementById('privacy')?.scrollIntoView({ behavior: 'smooth' });
-  };
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 navbar-glass">
@@ -51,32 +44,6 @@ export default function Header({
             <span className="text-xl text-foreground tracking-tight">Skillevate</span>
           </button>
 
-          {/* Navigation */}
-          {!hideNavigation && (
-            <nav className="hidden md:flex items-center gap-8">
-              <button 
-                onClick={scrollToFeatures}
-                className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-              >
-                Features
-              </button>
-              <button 
-                onClick={scrollToPrivacy}
-                className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-              >
-                Roadmap
-              </button>
-              <a
-                href="https://github.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
-              >
-                <Github className="w-4 h-4" />
-                <span>GitHub</span>
-              </a>
-            </nav>
-          )}
 
           {/* CTA & Theme Toggle */}
           <div className="flex items-center gap-3">
@@ -102,7 +69,7 @@ export default function Header({
               }
               className="gradient-primary hover:opacity-90 transition-all hover:shadow-lg hover:shadow-cyan-500/50"
             >
-              {isAuthenticated ? "Log Out" : "Start Journey"}
+              {isAuthenticated ? "Log Out" : "Login"}
             </Button>
             {isAuthenticated && userName ? (
               <span className="hidden sm:inline text-muted-foreground text-sm">Hi, {userName}</span>
