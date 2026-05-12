@@ -405,10 +405,15 @@ export function GamifyApp() {
   // ── Derived display values ────────────────────────────────────────────────
 
   const totalXp = progress?.totalXp ?? 1200;
-  const nextLevelXp = progress?.nextLevelXp ?? 2000;
-  const progressPercent = Math.min(100, Math.round((totalXp / nextLevelXp) * 100));
-  const remainingToNextLevel = Math.max(0, nextLevelXp - totalXp);
+  const nextLevelXp = progress?.nextLevelXp ?? 1800;
+  const currentStreak = progress?.currentStreak ?? 0;
   const tier = heroTier(totalXp);
+  const TIER_START_XP: Record<string, number> = { Apprentice: 0, Ranger: 600, Champion: 1200, Legend: 1800 };
+  const currentTierStart = TIER_START_XP[tier.name] ?? 0;
+  const progressPercent = tier.name === "Legend"
+    ? 100
+    : Math.min(100, Math.round(((totalXp - currentTierStart) / (nextLevelXp - currentTierStart)) * 100));
+  const remainingToNextLevel = tier.name === "Legend" ? 0 : Math.max(0, nextLevelXp - totalXp);
   const TierIcon = tier.icon;
 
   const courseNodes = storyNodes.filter(
@@ -1232,9 +1237,15 @@ export function GamifyApp() {
               </div>
               <p className="text-xs text-white/90 flex items-center gap-1.5 font-semibold">
                 <Zap size={12} className="text-amber-200" />
-                {remainingToNextLevel.toLocaleString()} XP to next tier
+                {tier.name === "Legend" ? "Max tier reached!" : `${remainingToNextLevel.toLocaleString()} XP to next tier`}
               </p>
             </div>
+            {currentStreak > 0 && (
+              <div className="mt-3 flex items-center gap-1.5 text-xs font-bold text-white/90">
+                <Flame size={13} className="text-orange-300" />
+                <span>{currentStreak}-day streak</span>
+              </div>
+            )}
           </div>
         </div>
 

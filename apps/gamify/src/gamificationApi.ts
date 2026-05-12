@@ -66,6 +66,7 @@ export type GamificationProgress = {
   courses: GamificationCourse[];
   achievements: GamificationAchievement[];
   recentActivity: GamificationActivity[];
+  currentStreak: number;
 };
 
 // Injected by webpack `DefinePlugin` from `Skillevate-MFE/.env`. Empty when
